@@ -1,0 +1,595 @@
+---
+alwaysApply: true
+---
+# Правила разработки кода HyperLiquid Node Parser
+
+## Основные принципы
+
+**KISS (Keep It Simple, Stupid)** - максимальная простота во всем
+**MVP (Minimum Viable Product)** - только необходимый функционал
+**TDD (Test-Driven Development)** - сначала тест, потом код
+
+> Подробное техническое видение: [docs/vision.md](vision.md)
+
+## Структура кода
+
+### Импорты
+```python
+# Стандартная библиотека
+import json
+import re
+from pathlib import Path
+
+# Сторонние библиотеки
+import fastapi
+from pydantic import BaseModel
+
+# Локальные модули
+from src.parser import log_parser
+from src.storage import file_storage
+```
+
+### Документирование
+- **Docstrings обязательны** для всех публичных методов
+- **Минимум комментариев** - только самые необходимые
+- **Приватные методы** - без документации
+
+```python
+def parse_log_file(file_path: str) -> List[Order]:
+    """Парсит файл лога и извлекает данные об ордерах.
+    
+    Args:
+        file_path: Путь к файлу лога
+        
+    Returns:
+        Список найденных ордеров
+        
+    Raises:
+        FileNotFoundError: Если файл не найден
+    """
+```
+
+## Модели данных
+
+### Pydantic модели
+```python
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+
+class Order(BaseModel):
+    id: str = Field(..., description="Уникальный ID ордера")
+    symbol: str = Field(..., description="Символ торговой пары")
+    side: str = Field(..., regex="^(buy|sell)$")
+    price: float = Field(..., gt=0)
+    size: float = Field(..., gt=0)
+    owner: str = Field(..., description="Адрес кошелька владельца")
+    timestamp: datetime
+    status: str = Field(..., regex="^(open|filled|cancelled|triggered)$")
+```
+
+## Асинхронность
+
+### FastAPI endpoints
+```python
+from fastapi import APIRouter, HTTPException
+from typing import List
+
+router = APIRouter()
+
+@router.get("/orders", response_model=List[Order])
+async def get_orders_async(
+    symbol: Optional[str] = None,
+    side: Optional[str] = None,
+    min_liquidity: Optional[float] = None
+) -> List[Order]:
+    """Получает список ордеров с фильтрацией."""
+```
+
+### Асинхронные операции
+```python
+import asyncio
+import aiofiles
+
+async def save_orders_async(orders: List[Order], file_path: str) -> None:
+    """Асинхронно сохраняет ордера в файл."""
+    async with aiofiles.open(file_path, 'w') as f:
+        await f.write(json.dumps([order.dict() for order in orders]))
+```
+
+## Обработка ошибок
+
+### Исключения
+```python
+class ParserError(Exception):
+    """Базовое исключение для ошибок парсинга."""
+    pass
+
+class ConfigError(Exception):
+    """Ошибка конфигурации."""
+    pass
+
+def _parse_json_line(line: str) -> dict:
+    """Парсит JSON строку с обработкой ошибок."""
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка парсинга JSON: {line[:100]}...")
+        raise ParserError(f"Invalid JSON: {e}")
+```
+
+## Логирование
+
+### Настройка логгера
+```python
+import logging
+from datetime import datetime
+
+def setup_logger(module_name: str) -> logging.Logger:
+    """Настраивает логгер для модуля."""
+    logger = logging.getLogger(module_name)
+    logger.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S.%fZ'
+    )
+    
+    return logger
+
+logger = setup_logger(__name__)
+```
+
+### Использование логгера
+```python
+logger.debug("Начинаем парсинг файла %s", file_path)
+logger.info("Обработано %d ордеров", len(orders))
+logger.warning("Неизвестный статус ордера: %s", status)
+logger.error("Ошибка доступа к файлу: %s", str(e))
+```
+
+## Тестирование
+
+### Структура тестов
+```python
+import pytest
+from unittest.mock import Mock, patch
+from src.parser import log_parser
+
+class TestLogParser:
+    """Тесты для модуля парсинга логов."""
+    
+    def setup_method(self):
+        """Настройка перед каждым тестом."""
+        self.parser = log_parser.LogParser()
+    
+    def test_parse_valid_order(self):
+        """Тест парсинга валидного ордера."""
+        # Arrange
+        json_line = '{"user":"0x123","oid":123,"coin":"BTC","side":"Bid","px":"50000"}'
+        
+        # Act
+        result = self.parser.parse_line(json_line)
+        
+        # Assert
+        assert result is not None
+        assert result.symbol == "BTC"
+        assert result.price == 50000.0
+```
+
+### Фикстуры
+```python
+@pytest.fixture
+def sample_orders():
+    """Фикстура с тестовыми ордерами."""
+    return [
+        Order(id="1", symbol="BTC", side="buy", price=50000.0, size=1.0, 
+              owner="0x123", timestamp=datetime.now(), status="open"),
+        Order(id="2", symbol="ETH", side="sell", price=3000.0, size=10.0,
+              owner="0x456", timestamp=datetime.now(), status="open")
+    ]
+```
+
+## Конфигурация
+
+### Загрузка настроек
+```python
+from pydantic import BaseSettings
+from typing import Optional
+
+class Settings(BaseSettings):
+    """Настройки приложения."""
+    NODE_LOGS_PATH: str = "~/hl/data/node_raw_book_diffs/hourly"
+    CLEANUP_INTERVAL_HOURS: int = 2
+    LOG_LEVEL: str = "DEBUG"
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+    
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+## Файловая структура
+
+### Организация модулей
+```
+src/
+├── __init__.py
+├── main.py              # Точка входа FastAPI
+├── parser/
+│   ├── __init__.py
+│   ├── log_parser.py    # Парсер логов
+│   └── order_extractor.py
+├── api/
+│   ├── __init__.py
+│   └── routes.py        # API endpoints
+├── storage/
+│   ├── __init__.py
+│   └── file_storage.py  # Файловое хранение
+└── watcher/
+    ├── __init__.py
+    └── file_watcher.py  # Мониторинг файлов
+```
+
+## Качество кода
+
+### Типизация
+- **Обязательная типизация** для всех функций и методов
+- **Type hints** для всех переменных где это улучшает читаемость
+- **Optional[]** для необязательных параметров
+
+### Именование
+- **snake_case** для функций и переменных
+- **PascalCase** для классов
+- **UPPER_CASE** для констант
+- **Понятные имена** - избегать сокращений
+- **_async** суффикс для асинхронных функций
+- **_** префикс для приватных функций и методов
+
+### Длина функций
+- **Максимум 20-30 строк** на функцию
+- **Разбивать сложную логику** на простые функции
+- **Single Responsibility** - одна функция = одна задача
+
+## Производительность
+
+### Оптимизации
+- **Асинхронные операции** для I/O
+- **Ленивая загрузка** больших файлов
+- **Кэширование** часто используемых данных
+- **Батчинг** для массовых операций
+
+### Память
+- **Генераторы** для больших файлов
+- **Контекстные менеджеры** для файлов
+- **Очистка ресурсов** в finally блоках
+
+## Безопасность
+
+### Валидация данных
+```python
+from pydantic import validator
+
+class Order(BaseModel):
+    price: float
+    
+    @validator('price')
+    def validate_price(cls, v):
+        if v <= 0:
+            raise ValueError('Цена должна быть положительной')
+        return v
+```
+
+### Обработка путей
+```python
+from pathlib import Path
+
+def _safe_file_path(user_path: str) -> Path:
+    """Безопасно обрабатывает путь к файлу."""
+    path = Path(user_path).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    return path
+```
+
+---
+
+**Помни**: Простота важнее сложности. Если сомневаешься - делай проще.
+# Правила разработки кода HyperLiquid Node Parser
+
+## Основные принципы
+
+**KISS (Keep It Simple, Stupid)** - максимальная простота во всем
+**MVP (Minimum Viable Product)** - только необходимый функционал
+**TDD (Test-Driven Development)** - сначала тест, потом код
+
+> Подробное техническое видение: [docs/vision.md](vision.md)
+
+## Структура кода
+
+### Импорты
+```python
+# Стандартная библиотека
+import json
+import re
+from pathlib import Path
+
+# Сторонние библиотеки
+import fastapi
+from pydantic import BaseModel
+
+# Локальные модули
+from src.parser import log_parser
+from src.storage import file_storage
+```
+
+### Документирование
+- **Docstrings обязательны** для всех публичных методов
+- **Минимум комментариев** - только самые необходимые
+- **Приватные методы** - без документации
+
+```python
+def parse_log_file(file_path: str) -> List[Order]:
+    """Парсит файл лога и извлекает данные об ордерах.
+    
+    Args:
+        file_path: Путь к файлу лога
+        
+    Returns:
+        Список найденных ордеров
+        
+    Raises:
+        FileNotFoundError: Если файл не найден
+    """
+```
+
+## Модели данных
+
+### Pydantic модели
+```python
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+
+class Order(BaseModel):
+    id: str = Field(..., description="Уникальный ID ордера")
+    symbol: str = Field(..., description="Символ торговой пары")
+    side: str = Field(..., regex="^(buy|sell)$")
+    price: float = Field(..., gt=0)
+    size: float = Field(..., gt=0)
+    owner: str = Field(..., description="Адрес кошелька владельца")
+    timestamp: datetime
+    status: str = Field(..., regex="^(open|filled|cancelled|triggered)$")
+```
+
+## Асинхронность
+
+### FastAPI endpoints
+```python
+from fastapi import APIRouter, HTTPException
+from typing import List
+
+router = APIRouter()
+
+@router.get("/orders", response_model=List[Order])
+async def get_orders_async(
+    symbol: Optional[str] = None,
+    side: Optional[str] = None,
+    min_liquidity: Optional[float] = None
+) -> List[Order]:
+    """Получает список ордеров с фильтрацией."""
+```
+
+### Асинхронные операции
+```python
+import asyncio
+import aiofiles
+
+async def save_orders_async(orders: List[Order], file_path: str) -> None:
+    """Асинхронно сохраняет ордера в файл."""
+    async with aiofiles.open(file_path, 'w') as f:
+        await f.write(json.dumps([order.dict() for order in orders]))
+```
+
+## Обработка ошибок
+
+### Исключения
+```python
+class ParserError(Exception):
+    """Базовое исключение для ошибок парсинга."""
+    pass
+
+class ConfigError(Exception):
+    """Ошибка конфигурации."""
+    pass
+
+def _parse_json_line(line: str) -> dict:
+    """Парсит JSON строку с обработкой ошибок."""
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка парсинга JSON: {line[:100]}...")
+        raise ParserError(f"Invalid JSON: {e}")
+```
+
+## Логирование
+
+### Настройка логгера
+```python
+import logging
+from datetime import datetime
+
+def setup_logger(module_name: str) -> logging.Logger:
+    """Настраивает логгер для модуля."""
+    logger = logging.getLogger(module_name)
+    logger.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S.%fZ'
+    )
+    
+    return logger
+
+logger = setup_logger(__name__)
+```
+
+### Использование логгера
+```python
+logger.debug("Начинаем парсинг файла %s", file_path)
+logger.info("Обработано %d ордеров", len(orders))
+logger.warning("Неизвестный статус ордера: %s", status)
+logger.error("Ошибка доступа к файлу: %s", str(e))
+```
+
+## Тестирование
+
+### Структура тестов
+```python
+import pytest
+from unittest.mock import Mock, patch
+from src.parser import log_parser
+
+class TestLogParser:
+    """Тесты для модуля парсинга логов."""
+    
+    def setup_method(self):
+        """Настройка перед каждым тестом."""
+        self.parser = log_parser.LogParser()
+    
+    def test_parse_valid_order(self):
+        """Тест парсинга валидного ордера."""
+        # Arrange
+        json_line = '{"user":"0x123","oid":123,"coin":"BTC","side":"Bid","px":"50000"}'
+        
+        # Act
+        result = self.parser.parse_line(json_line)
+        
+        # Assert
+        assert result is not None
+        assert result.symbol == "BTC"
+        assert result.price == 50000.0
+```
+
+### Фикстуры
+```python
+@pytest.fixture
+def sample_orders():
+    """Фикстура с тестовыми ордерами."""
+    return [
+        Order(id="1", symbol="BTC", side="buy", price=50000.0, size=1.0, 
+              owner="0x123", timestamp=datetime.now(), status="open"),
+        Order(id="2", symbol="ETH", side="sell", price=3000.0, size=10.0,
+              owner="0x456", timestamp=datetime.now(), status="open")
+    ]
+```
+
+## Конфигурация
+
+### Загрузка настроек
+```python
+from pydantic import BaseSettings
+from typing import Optional
+
+class Settings(BaseSettings):
+    """Настройки приложения."""
+    NODE_LOGS_PATH: str = "~/hl/data/node_raw_book_diffs/hourly"
+    CLEANUP_INTERVAL_HOURS: int = 2
+    LOG_LEVEL: str = "DEBUG"
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+    
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+## Файловая структура
+
+### Организация модулей
+```
+src/
+├── __init__.py
+├── main.py              # Точка входа FastAPI
+├── parser/
+│   ├── __init__.py
+│   ├── log_parser.py    # Парсер логов
+│   └── order_extractor.py
+├── api/
+│   ├── __init__.py
+│   └── routes.py        # API endpoints
+├── storage/
+│   ├── __init__.py
+│   └── file_storage.py  # Файловое хранение
+└── watcher/
+    ├── __init__.py
+    └── file_watcher.py  # Мониторинг файлов
+```
+
+## Качество кода
+
+### Типизация
+- **Обязательная типизация** для всех функций и методов
+- **Type hints** для всех переменных где это улучшает читаемость
+- **Optional[]** для необязательных параметров
+
+### Именование
+- **snake_case** для функций и переменных
+- **PascalCase** для классов
+- **UPPER_CASE** для констант
+- **Понятные имена** - избегать сокращений
+- **_async** суффикс для асинхронных функций
+- **_** префикс для приватных функций и методов
+
+### Длина функций
+- **Максимум 20-30 строк** на функцию
+- **Разбивать сложную логику** на простые функции
+- **Single Responsibility** - одна функция = одна задача
+
+## Производительность
+
+### Оптимизации
+- **Асинхронные операции** для I/O
+- **Ленивая загрузка** больших файлов
+- **Кэширование** часто используемых данных
+- **Батчинг** для массовых операций
+
+### Память
+- **Генераторы** для больших файлов
+- **Контекстные менеджеры** для файлов
+- **Очистка ресурсов** в finally блоках
+
+## Безопасность
+
+### Валидация данных
+```python
+from pydantic import validator
+
+class Order(BaseModel):
+    price: float
+    
+    @validator('price')
+    def validate_price(cls, v):
+        if v <= 0:
+            raise ValueError('Цена должна быть положительной')
+        return v
+```
+
+### Обработка путей
+```python
+from pathlib import Path
+
+def _safe_file_path(user_path: str) -> Path:
+    """Безопасно обрабатывает путь к файлу."""
+    path = Path(user_path).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    return path
+```
+
+---
+
+**Помни**: Простота важнее сложности. Если сомневаешься - делай проще.

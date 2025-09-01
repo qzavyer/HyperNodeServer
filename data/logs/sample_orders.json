@@ -1,0 +1,5 @@
+{"user":"0x768484f7e2ebb675c57838366c02ae99ba2a9b08","oid":35061046831,"coin":"CHILLGUY","side":"Bid","px":"1.36","raw_book_diff":{"new":{"sz":"186910.0"}}}
+{"user":"0x768484f7e2ebb675c57838366c02ae99ba2a9b08","oid":35061055064,"coin":"BTC","side":"Bid","px":"115323.2","raw_book_diff":{"update":{"origSz":"0.2086","newSz":"0.2076"}}}
+{"user":"0xc64cc00b46101bd40aa1c3121195e85c0b0918d8","oid":35061057543,"side":"Ask","px":"115200.2","coin":"HYPE","raw_book_diff":"remove"}
+{"user":"0x1234567890abcdef","oid":35061057544,"coin":"ETH","side":"Ask","px":"3000.0","raw_book_diff":{"new":{"sz":"10.5"}}}
+{"user":"0xabcdef1234567890","oid":35061057545,"coin":"BTC","side":"Bid","px":"50000.0","raw_book_diff":{"update":{"origSz":"1.0","newSz":"0.8"}}}
