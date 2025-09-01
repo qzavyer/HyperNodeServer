@@ -1,0 +1,17 @@
+{
+  "node_logs_path": "~/hl/data/node_raw_book_diffs/hourly",
+  "cleanup_interval_hours": 2,
+  "api_host": "0.0.0.0",
+  "api_port": 8000,
+  "log_level": "DEBUG",
+  "log_file_path": "logs/app.log",
+  "log_max_size_mb": 100,
+  "log_retention_days": 30,
+  "data_dir": "data",
+  "config_file_path": "config/coins.json",
+  "max_orders_per_request": 1000,
+  "file_read_retry_attempts": 3,
+  "file_read_retry_delay": 1.0,
+  "min_liquidity_by_symbol": {},
+  "supported_symbols": []
+}
