@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.routes import router
 from src.storage.file_storage import FileStorage
 from src.storage.order_manager import OrderManager
+from src.storage.config_manager import ConfigManager
 from src.watcher.file_watcher import FileWatcher
 from src.utils.logger import setup_logger
 from config.settings import settings
@@ -35,12 +36,17 @@ app.include_router(router, prefix="/api/v1")
 # Global instances
 file_storage = FileStorage()
 order_manager = OrderManager(file_storage)
+config_manager = ConfigManager()
 file_watcher = FileWatcher(order_manager)
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup."""
     try:
+        # Initialize config manager
+        await config_manager.load_config_async()
+        logger.info("✅ Configuration loaded successfully")
+        
         # Initialize order manager
         await order_manager.initialize()
         logger.info("✅ Application started successfully")
@@ -61,7 +67,7 @@ async def shutdown_event():
         await file_watcher.stop_async()
         
         # Cleanup old orders
-        cleaned_count = order_manager.cleanup_old_orders(settings.CLEANUP_INTERVAL_HOURS)
+        cleaned_count = await order_manager.cleanup_old_orders(settings.CLEANUP_INTERVAL_HOURS)
         logger.info(f"🧹 Cleaned up {cleaned_count} old orders")
         
     except Exception as e:

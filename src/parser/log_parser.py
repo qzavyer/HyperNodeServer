@@ -20,7 +20,7 @@ class LogParser:
         """Initialize log parser."""
         self.logger = get_logger(__name__)
     
-    def parse_file(self, file_path: str) -> List[Order]:
+    def parse_file(self, file_path: str) -> List['Order']:
         """Parse log file and extract orders.
         
         Args:
@@ -59,7 +59,7 @@ class LogParser:
         except Exception as e:
             raise ParserError(f"Failed to parse file {file_path}: {e}")
     
-    def _parse_line(self, line: str) -> Optional[Order]:
+    def _parse_line(self, line: str) -> Optional['Order']:
         """Parse single log line.
         
         Args:
@@ -75,7 +75,7 @@ class LogParser:
             self.logger.debug(f"Invalid JSON in line: {line[:100]}...")
             return None
     
-    def _extract_order(self, data: Dict[str, Any]) -> Optional[Order]:
+    def _extract_order(self, data: Dict[str, Any]) -> Optional['Order']:
         """Extract order from parsed JSON data.
         
         Args:

@@ -1,21 +1,32 @@
 """API routes for HyperLiquid Node Parser."""
 
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
-from src.storage.models import Order
+from src.storage.models import Order, Config
 from src.storage.order_manager import OrderManager
+from src.storage.config_manager import ConfigManager
 
 router = APIRouter()
 
-# Global order manager instance (will be initialized in main.py)
+# Global instances (will be initialized in main.py)
 order_manager: Optional[OrderManager] = None
+config_manager: Optional[ConfigManager] = None
+
+# Import from main to access global instances
+import src.main
 
 def get_order_manager() -> OrderManager:
     """Get order manager instance."""
-    if order_manager is None:
+    if src.main.order_manager is None:
         raise HTTPException(status_code=500, detail="Order manager not initialized")
-    return order_manager
+    return src.main.order_manager
+
+def get_config_manager() -> ConfigManager:
+    """Get config manager instance."""
+    if src.main.config_manager is None:
+        raise HTTPException(status_code=500, detail="Config manager not initialized")
+    return src.main.config_manager
 
 @router.get("/orders", response_model=List[Order])
 async def get_orders_async(
@@ -92,25 +103,38 @@ async def get_orders_summary_async(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get summary: {str(e)}")
 
-@router.get("/config")
-async def get_config_async():
+@router.get("/config", response_model=Config)
+async def get_config_async(
+    manager: ConfigManager = Depends(get_config_manager)
+) -> Config:
     """Get current configuration.
+
+    Args:
+        manager: Config manager instance
 
     Returns:
         Current configuration
     """
-    # TODO: Implement config retrieval
-    return {"status": "not implemented"}
+    try:
+        return manager.get_config()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
 
-@router.put("/config")
-async def update_config_async(config: dict):
+@router.put("/config", response_model=Config)
+async def update_config_async(
+    updates: Dict[str, Any],
+    manager: ConfigManager = Depends(get_config_manager)
+) -> Config:
     """Update configuration.
 
     Args:
-        config: New configuration
+        updates: Configuration updates
+        manager: Config manager instance
 
     Returns:
         Updated configuration
     """
-    # TODO: Implement config update
-    return {"status": "not implemented"}
+    try:
+        return await manager.update_config_async(updates)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to update config: {str(e)}")
