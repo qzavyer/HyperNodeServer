@@ -11,7 +11,7 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./config:/app/config
-      - ${NODE_LOGS_PATH}:/app/node_logs:ro
+      - ~/hl/data/node_order_statuses/hourly:/app/node_logs:ro
     environment:
       - API_HOST=0.0.0.0
       - API_PORT=8000
