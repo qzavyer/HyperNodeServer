@@ -30,7 +30,7 @@ class TestAPI:
         data = response.json()
         assert "status" in data
 
-    @patch('src.api.routes.order_manager')
+    @patch('src.main.order_manager')
     def test_get_orders_endpoint(self, mock_manager):
         """Test get orders endpoint."""
         # Mock order manager
@@ -55,7 +55,7 @@ class TestAPI:
         assert len(data) == 1
         assert data[0]["symbol"] == "BTC"
 
-    @patch('src.api.routes.order_manager')
+    @patch('src.main.order_manager')
     def test_get_orders_with_filters(self, mock_manager):
         """Test get orders endpoint with filters."""
         mock_orders = []
@@ -72,7 +72,7 @@ class TestAPI:
             status=None
         )
 
-    @patch('src.api.routes.order_manager')
+    @patch('src.main.order_manager')
     def test_get_order_by_id(self, mock_manager):
         """Test get order by ID endpoint."""
         mock_order = Order(
@@ -93,7 +93,7 @@ class TestAPI:
         assert data["id"] == "1"
         assert data["symbol"] == "BTC"
 
-    @patch('src.api.routes.order_manager')
+    @patch('src.main.order_manager')
     def test_get_order_by_id_not_found(self, mock_manager):
         """Test get order by ID when not found."""
         mock_manager.get_order_by_id.return_value = None
@@ -103,14 +103,14 @@ class TestAPI:
         data = response.json()
         assert data["detail"] == "Order not found"
 
-    @patch('src.api.routes.order_manager')
+    @patch('src.main.order_manager')
     def test_get_orders_summary(self, mock_manager):
         """Test get orders summary endpoint."""
         mock_manager.get_order_count.return_value = 5
         mock_manager.get_order_count_by_status.return_value = {
             "open": 3,
             "filled": 1,
-            "cancelled": 1
+            "canceled": 1
         }
         mock_manager.get_open_orders.return_value = [MagicMock(), MagicMock(), MagicMock()]
         
@@ -121,7 +121,28 @@ class TestAPI:
         assert data["status_counts"]["open"] == 3
         assert data["open_orders_count"] == 3
 
-    def test_get_config_endpoint(self):
+    @patch('src.main.config_manager')
+    def test_get_config_endpoint(self, mock_config_manager):
         """Test get config endpoint."""
+        from src.storage.models import Config
+        mock_config = Config(
+            node_logs_path="/test/path",
+            cleanup_interval_hours=2,
+            api_host="0.0.0.0",
+            api_port=8000,
+            log_level="DEBUG",
+            log_file_path="logs/app.log",
+            log_max_size_mb=100,
+            log_retention_days=30,
+            data_dir="data",
+            config_file_path="config/config.json",
+            max_orders_per_request=1000,
+            file_read_retry_attempts=3,
+            file_read_retry_delay=1.0,
+            min_liquidity_by_symbol={},
+            supported_symbols=[]
+        )
+        mock_config_manager.get_config.return_value = mock_config
+        
         response = client.get("/api/v1/config")
         assert response.status_code == 200

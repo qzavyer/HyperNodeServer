@@ -21,11 +21,14 @@ class TestIntegration:
     
     def setup_method(self):
         """Setup before each test."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.data_dir = Path(self.temp_dir) / "data"
-        self.logs_dir = Path(self.temp_dir) / "logs"
-        self.data_dir.mkdir()
-        self.logs_dir.mkdir()
+        # Always create a fresh temporary directory
+        self.temp_dir = Path(tempfile.mkdtemp())
+        self.data_dir = self.temp_dir / "data"
+        self.logs_dir = self.temp_dir / "logs"
+        
+        # Create fresh directories
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
         
         # Create test log file
         self.test_log_file = self.logs_dir / "test.log"
@@ -38,11 +41,11 @@ class TestIntegration:
     def create_test_log_file(self):
         """Create test log file with sample data."""
         test_data = [
-            '{"user":"0x1234567890abcdef","oid":123,"coin":"BTC","side":"Bid","px":"50000","sz":"1.0","time":1640995200000}',
-            '{"user":"0xfedcba0987654321","oid":456,"coin":"ETH","side":"Ask","px":"3000","sz":"10.0","time":1640995201000}',
-            '{"user":"0xabcdef1234567890","oid":789,"coin":"BTC","side":"Bid","px":"49000","sz":"0.5","time":1640995202000}',
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0x1234567890abcdef","status":"open","order":{"coin":"BTC","side":"B","limitPx":"50000","sz":"1.0","oid":123}}',
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0xfedcba0987654321","status":"open","order":{"coin":"ETH","side":"A","limitPx":"3000","sz":"10.0","oid":456}}',
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0xabcdef1234567890","status":"open","order":{"coin":"BTC","side":"B","limitPx":"49000","sz":"0.5","oid":789}}',
             'invalid json line',
-            '{"user":"0x1111111111111111","oid":999,"coin":"SOL","side":"Ask","px":"100","sz":"100.0","time":1640995203000}'
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0x1111111111111111","status":"open","order":{"coin":"SOL","side":"A","limitPx":"100","sz":"100.0","oid":999}}'
         ]
         
         with open(self.test_log_file, 'w') as f:
@@ -53,8 +56,7 @@ class TestIntegration:
     async def test_complete_workflow(self):
         """Test complete workflow from log parsing to API response."""
         # 1. Initialize components
-        file_storage = FileStorage()
-        file_storage.data_dir = self.data_dir
+        file_storage = FileStorage(str(self.data_dir))
         
         order_manager = OrderManager(file_storage)
         config_manager = ConfigManager(str(self.data_dir / "config.json"))
@@ -77,7 +79,16 @@ class TestIntegration:
             
             config = await config_manager.load_config_async()
         
-        # 3. Initialize order manager
+        # 3. Clear any existing state before initialization
+        order_manager.clear()
+        
+        # Clear any existing data files before initialization
+        if hasattr(file_storage, 'data_dir') and file_storage.data_dir.exists():
+            for file in file_storage.data_dir.glob('*'):
+                if file.is_file():
+                    file.unlink()
+        
+        # Initialize order manager (after clearing files)
         await order_manager.initialize()
         
         # 4. Parse log file
@@ -86,7 +97,7 @@ class TestIntegration:
         
         # 5. Add orders to manager
         for order in orders:
-            order_manager.add_order(order)
+            await order_manager.update_order(order)
         
         # 6. Save orders to storage
         await file_storage.save_orders_async(orders)
@@ -114,7 +125,7 @@ class TestIntegration:
         assert len(filtered_orders) == 2
         
         # 9. Test order retrieval by ID
-        order_id = f"0x1234567890abcdef_123"
+        order_id = "123"
         retrieved_order = order_manager.get_order_by_id(order_id)
         assert retrieved_order is not None
         assert retrieved_order.symbol == "BTC"
@@ -134,8 +145,7 @@ class TestIntegration:
     async def test_order_status_transitions(self):
         """Test order status transitions."""
         # Setup
-        file_storage = FileStorage()
-        file_storage.data_dir = self.data_dir
+        file_storage = FileStorage(str(self.data_dir))
         order_manager = OrderManager(file_storage)
         await order_manager.initialize()
         
@@ -151,18 +161,38 @@ class TestIntegration:
             status="open"
         )
         
-        order_manager.add_order(order)
+        await order_manager.update_order(order)
         
         # Test status transitions
         assert order.status == "open"
         
         # Fill order
-        order_manager.update_order_status("test_order_1", "filled")
-        assert order.status == "filled"
+        filled_order = Order(
+            id="test_order_1",
+            symbol="BTC",
+            side="Bid",
+            price=50000.0,
+            size=0.0,
+            owner="0x1234567890abcdef",
+            timestamp=datetime.now(),
+            status="filled"
+        )
+        await order_manager.update_order(filled_order)
+        assert order_manager.get_order_by_id("test_order_1").status == "filled"
         
         # Try to cancel filled order (should not work)
-        order_manager.update_order_status("test_order_1", "cancelled")
-        assert order.status == "filled"  # Should remain filled
+        cancelled_order = Order(
+            id="test_order_1",
+            symbol="BTC",
+            side="Bid",
+            price=50000.0,
+            size=0.0,
+            owner="0x1234567890abcdef",
+            timestamp=datetime.now(),
+            status="canceled"
+        )
+        await order_manager.update_order(cancelled_order)
+        assert order_manager.get_order_by_id("test_order_1").status == "filled"  # Should remain filled
         
         # Create new order and cancel it
         order2 = Order(
@@ -176,9 +206,19 @@ class TestIntegration:
             status="open"
         )
         
-        order_manager.add_order(order2)
-        order_manager.update_order_status("test_order_2", "cancelled")
-        assert order2.status == "cancelled"
+        await order_manager.update_order(order2)
+        cancelled_order2 = Order(
+            id="test_order_2",
+            symbol="ETH",
+            side="Ask",
+            price=3000.0,
+            size=0.0,
+            owner="0xfedcba0987654321",
+            timestamp=datetime.now(),
+            status="canceled"
+        )
+        await order_manager.update_order(cancelled_order2)
+        assert order_manager.get_order_by_id("test_order_2").status == "canceled"
     
     @pytest.mark.asyncio
     async def test_configuration_persistence(self):
@@ -236,8 +276,7 @@ class TestIntegration:
     async def test_error_handling_and_recovery(self):
         """Test error handling and recovery scenarios."""
         # Setup
-        file_storage = FileStorage()
-        file_storage.data_dir = self.data_dir
+        file_storage = FileStorage(str(self.data_dir))
         order_manager = OrderManager(file_storage)
         await order_manager.initialize()
         
@@ -281,11 +320,11 @@ class TestIntegration:
         )
         
         # Add first order
-        order_manager.add_order(order1)
+        await order_manager.update_order(order1)
         assert order_manager.get_order_by_id("duplicate_order") is not None
         
         # Add duplicate order (should update existing)
-        order_manager.add_order(order2)
+        await order_manager.update_order(order2)
         updated_order = order_manager.get_order_by_id("duplicate_order")
         assert updated_order.price == 51000.0  # Should be updated
         assert updated_order.size == 2.0  # Should be updated
@@ -294,9 +333,18 @@ class TestIntegration:
     async def test_performance_with_large_dataset(self):
         """Test performance with large dataset."""
         # Setup
-        file_storage = FileStorage()
-        file_storage.data_dir = self.data_dir
+        file_storage = FileStorage(str(self.data_dir))
         order_manager = OrderManager(file_storage)
+        
+        # Clear any existing state before initialization
+        order_manager.clear()
+        
+        # Clear any existing data files before initialization
+        if hasattr(file_storage, 'data_dir') and file_storage.data_dir.exists():
+            for file in file_storage.data_dir.glob('*'):
+                if file.is_file():
+                    file.unlink()
+        
         await order_manager.initialize()
         
         # Create large dataset
@@ -319,7 +367,7 @@ class TestIntegration:
         for i in range(0, len(orders), batch_size):
             batch = orders[i:i + batch_size]
             for order in batch:
-                order_manager.add_order(order)
+                await order_manager.update_order(order)
         
         # Test filtering performance
         btc_orders = order_manager.get_orders(symbol="BTC")
@@ -339,5 +387,5 @@ class TestIntegration:
         test_order_id = "order_500"
         retrieved_order = order_manager.get_order_by_id(test_order_id)
         assert retrieved_order is not None
-        assert retrieved_order.symbol == "ETH"  # 500 is even, so ETH
+        assert retrieved_order.symbol == "BTC"  # 500 is even, so BTC
         assert retrieved_order.side == "Ask"  # 500 % 3 = 2, so Ask

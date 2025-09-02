@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "id": "123",
+    "symbol": "BTC",
+    "side": "Bid",
+    "price": 50000.0,
+    "size": 1.0,
+    "owner": "0x1234567890abcdef",
+    "timestamp": "2025-09-02 08:26:36.877863",
+    "status": "open"
+  },
+  {
+    "id": "456",
+    "symbol": "ETH",
+    "side": "Ask",
+    "price": 3000.0,
+    "size": 10.0,
+    "owner": "0xfedcba0987654321",
+    "timestamp": "2025-09-02 08:26:36.877863",
+    "status": "open"
+  },
+  {
+    "id": "789",
+    "symbol": "BTC",
+    "side": "Bid",
+    "price": 49000.0,
+    "size": 0.5,
+    "owner": "0xabcdef1234567890",
+    "timestamp": "2025-09-02 08:26:36.877863",
+    "status": "open"
+  },
+  {
+    "id": "999",
+    "symbol": "SOL",
+    "side": "Ask",
+    "price": 100.0,
+    "size": 100.0,
+    "owner": "0x1111111111111111",
+    "timestamp": "2025-09-02 08:26:36.877863",
+    "status": "open"
+  }
+]

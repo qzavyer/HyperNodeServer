@@ -5,15 +5,15 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 
 class Order(BaseModel):
-    """Order model."""
-    id: str = Field(..., description="Unique order ID")
-    symbol: str = Field(..., description="Trading pair symbol")
-    side: str = Field(..., pattern="^(Bid|Ask)$", description="Order side")
-    price: float = Field(..., gt=0, description="Order price")
-    size: float = Field(..., ge=0, description="Order size")
-    owner: str = Field(..., description="Wallet address of order owner")
-    timestamp: datetime = Field(..., description="Order timestamp")
-    status: str = Field(..., pattern="^(open|filled|cancelled|triggered)$", description="Order status")
+    """Модель ордера."""
+    id: str = Field(..., description="Уникальный ID ордера (OID)")
+    symbol: str = Field(..., description="Символ торговой пары")
+    side: str = Field(..., pattern="^(Bid|Ask)$", description="Сторона: Bid или Ask")
+    price: float = Field(..., gt=0, description="Цена ордера")
+    size: float = Field(..., ge=0, description="Размер ордера")
+    owner: str = Field(..., description="Адрес кошелька владельца")
+    timestamp: datetime = Field(..., description="Время создания/обновления")
+    status: str = Field(..., pattern="^(open|filled|canceled|triggered)$", description="Статус ордера")
 
 class LogEntry(BaseModel):
     """Log entry model."""

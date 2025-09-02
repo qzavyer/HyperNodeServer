@@ -3,7 +3,7 @@
 import pytest
 import asyncio
 import tempfile
-import shutil
+import os
 import time
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
@@ -28,6 +28,7 @@ class TestFileWatcher:
     
     def teardown_method(self):
         """Cleanup after each test."""
+        import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     @pytest.mark.asyncio
@@ -128,8 +129,8 @@ class TestFileWatcher:
     async def test_process_file_async_with_valid_data(self):
         """Test processing file with valid order data."""
         test_file = self.temp_dir / "test.json"
-        test_content = f'''{"user":"0x123","status":"open","order":{"oid":123,"coin":"BTC","side":"Bid","px":"50000"}}
-{"user":"0x456","status":"cancelled","order":{"oid":456,"coin":"ETH","side":"Ask","px":"3000"}}'''
+        test_content = f'''{{"time":"2025-09-02T08:26:36.877863946","user":"0x123","status":"open","order":{{"coin":"BTC","side":"B","limitPx":"50000","sz":"1.0","oid":123}}}}
+{{"time":"2025-09-02T08:26:36.877863946","user":"0x456","status":"canceled","order":{{"coin":"ETH","side":"A","limitPx":"3000","sz":"10.0","oid":456}}}}'''
         test_file.write_text(test_content)
         
         with patch.object(self.file_watcher.order_manager, 'update_order') as mock_update:

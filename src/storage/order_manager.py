@@ -38,6 +38,10 @@ class OrderManager:
             self.logger.error(f"Failed to initialize order manager: {e}")
             raise OrderManagerError(f"Initialization failed: {e}")
     
+    def clear(self) -> None:
+        """Clear all orders from memory (for testing)."""
+        self.orders.clear()
+    
     async def update_order(self, order: Order) -> None:
         """Update order status and data.
         
@@ -68,8 +72,8 @@ class OrderManager:
         """Batch update orders with conflict resolution.
 
         - Groups updates by order id
-        - If both filled and cancelled are present simultaneously, chooses cancelled and logs warning
-        - Otherwise applies status priority: cancelled > filled > triggered > open
+        - If both filled and canceled are present simultaneously, chooses canceled and logs warning
+        - Otherwise applies status priority: canceled > filled > triggered > open
         - Applies transition rules from current status to resolved status
 
         Args:
@@ -120,15 +124,15 @@ class OrderManager:
         """Resolve final status for a batch of simultaneous updates.
 
         Rules:
-        - If both filled and cancelled present -> choose cancelled and log warning
-        - Else priority: cancelled > filled > triggered > open
+        - If both filled and canceled present -> choose canceled and log warning
+        - Else priority: canceled > filled > triggered > open
         """
-        if "filled" in statuses and "cancelled" in statuses:
-            self.logger.warning("Simultaneous filled and cancelled detected; choosing cancelled")
-            return "cancelled"
+        if "filled" in statuses and "canceled" in statuses:
+            self.logger.warning("Simultaneous filled and canceled detected; choosing canceled")
+            return "canceled"
 
-        if "cancelled" in statuses:
-            return "cancelled"
+        if "canceled" in statuses:
+            return "canceled"
         if "filled" in statuses:
             return "filled"
         if "triggered" in statuses:
@@ -136,9 +140,9 @@ class OrderManager:
         if "open" in statuses:
             return "open"
 
-        # Unknown -> default to cancelled
-        self.logger.warning(f"Unknown statuses in batch: {statuses}; defaulting to cancelled")
-        return "cancelled"
+        # Unknown -> default to canceled
+        self.logger.warning(f"Unknown statuses in batch: {statuses}; defaulting to canceled")
+        return "canceled"
     
     def _apply_status_transition(self, current_status: str, new_status: str) -> str:
         """Apply status transition rules from vision.md.
@@ -152,35 +156,35 @@ class OrderManager:
         """
         # Valid transitions according to vision.md:
         # open -> filled
-        # open -> cancelled  
+        # open -> canceled  
         # open -> triggered -> filled
-        # open -> triggered -> cancelled
+        # open -> triggered -> canceled
         
         if current_status == "open":
-            if new_status in ["filled", "cancelled", "triggered"]:
+            if new_status in ["filled", "canceled", "triggered"]:
                 return new_status
             elif new_status == "open":
                 return "open"  # Allow staying in open status
             else:
-                self.logger.warning(f"Unknown status transition: {current_status} -> {new_status}, defaulting to cancelled")
-                return "cancelled"
+                self.logger.warning(f"Unknown status transition: {current_status} -> {new_status}, defaulting to canceled")
+                return "canceled"
         
         elif current_status == "triggered":
-            if new_status in ["filled", "cancelled"]:
+            if new_status in ["filled", "canceled"]:
                 return new_status
             else:
-                self.logger.warning(f"Unknown status transition: {current_status} -> {new_status}, defaulting to cancelled")
-                return "cancelled"
+                self.logger.warning(f"Unknown status transition: {current_status} -> {new_status}, defaulting to canceled")
+                return "canceled"
         
-        elif current_status in ["filled", "cancelled"]:
-            # If order was already filled or cancelled, log warning but don't change status
+        elif current_status in ["filled", "canceled"]:
+            # If order was already filled or canceled, log warning but don't change status
             self.logger.warning(f"Order already in final state {current_status}, ignoring new status {new_status}")
             return current_status
         
         else:
-            # Unknown current status, default to cancelled
-            self.logger.warning(f"Unknown current status {current_status}, defaulting to cancelled")
-            return "cancelled"
+            # Unknown current status, default to canceled
+            self.logger.warning(f"Unknown current status {current_status}, defaulting to canceled")
+            return "canceled"
     
     def get_orders(self, 
                    symbol: Optional[str] = None,

@@ -2,6 +2,7 @@
 
 import pytest
 import asyncio
+import tempfile
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 from typing import Set
@@ -119,10 +120,10 @@ class TestOrderManager:
         result = self.manager._apply_status_transition("open", "filled")
         assert result == "filled"
     
-    def test_status_transition_open_to_cancelled(self):
-        """Test status transition from open to cancelled."""
-        result = self.manager._apply_status_transition("open", "cancelled")
-        assert result == "cancelled"
+    def test_status_transition_open_to_canceled(self):
+        """Test status transition from open to canceled."""
+        result = self.manager._apply_status_transition("open", "canceled")
+        assert result == "canceled"
     
     def test_status_transition_open_to_triggered(self):
         """Test status transition from open to triggered."""
@@ -134,30 +135,30 @@ class TestOrderManager:
         result = self.manager._apply_status_transition("triggered", "filled")
         assert result == "filled"
     
-    def test_status_transition_triggered_to_cancelled(self):
-        """Test status transition from triggered to cancelled."""
-        result = self.manager._apply_status_transition("triggered", "cancelled")
-        assert result == "cancelled"
+    def test_status_transition_triggered_to_canceled(self):
+        """Test status transition from triggered to canceled."""
+        result = self.manager._apply_status_transition("triggered", "canceled")
+        assert result == "canceled"
     
     def test_status_transition_filled_ignores_new_status(self):
         """Test that filled orders ignore new status updates."""
-        result = self.manager._apply_status_transition("filled", "cancelled")
+        result = self.manager._apply_status_transition("filled", "canceled")
         assert result == "filled"  # Should remain filled
     
-    def test_status_transition_cancelled_ignores_new_status(self):
-        """Test that cancelled orders ignore new status updates."""
-        result = self.manager._apply_status_transition("cancelled", "filled")
-        assert result == "cancelled"  # Should remain cancelled
+    def test_status_transition_canceled_ignores_new_status(self):
+        """Test that canceled orders ignore new status updates."""
+        result = self.manager._apply_status_transition("canceled", "filled")
+        assert result == "canceled"  # Should remain canceled
     
     def test_status_transition_unknown_current_status(self):
         """Test handling of unknown current status."""
         result = self.manager._apply_status_transition("unknown", "filled")
-        assert result == "cancelled"  # Should default to cancelled
+        assert result == "canceled"  # Should default to canceled
     
     def test_status_transition_unknown_new_status(self):
         """Test handling of unknown new status."""
         result = self.manager._apply_status_transition("open", "unknown")
-        assert result == "cancelled"  # Should default to cancelled
+        assert result == "canceled"  # Should default to canceled
     
     def test_get_orders_filter_by_symbol(self):
         """Test filtering orders by symbol."""
@@ -322,8 +323,8 @@ class TestOrderManager:
         assert "2" not in self.manager.orders  # Old order should be removed
 
     @pytest.mark.asyncio
-    async def test_batch_update_conflict_filled_cancelled(self):
-        """If filled and cancelled arrive together, choose cancelled and log warning."""
+    async def test_batch_update_conflict_filled_canceled(self):
+        """If filled and canceled arrive together, choose canceled and log warning."""
         await self.manager.initialize()
 
         open_order = Order(
@@ -336,19 +337,19 @@ class TestOrderManager:
             id="1", symbol="BTC", side="Bid", price=50000.0, size=0.0,
             owner="0x123", timestamp=datetime.now(), status="filled"
         )
-        cancelled_update = Order(
+        canceled_update = Order(
             id="1", symbol="BTC", side="Bid", price=50000.0, size=0.0,
-            owner="0x123", timestamp=datetime.now(), status="cancelled"
+            owner="0x123", timestamp=datetime.now(), status="canceled"
         )
 
-        await self.manager.update_orders_batch_async([filled_update, cancelled_update])
+        await self.manager.update_orders_batch_async([filled_update, canceled_update])
 
         final = self.manager.get_order_by_id("1")
-        assert final.status == "cancelled"
+        assert final.status == "canceled"
 
     @pytest.mark.asyncio
     async def test_batch_update_priority(self):
-        """Batch update resolves by priority: cancelled > filled > triggered > open."""
+        """Batch update resolves by priority: canceled > filled > triggered > open."""
         await self.manager.initialize()
 
         open_order = Order(

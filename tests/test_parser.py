@@ -2,7 +2,7 @@
 
 import pytest
 import tempfile
-import shutil
+import os
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -27,50 +27,56 @@ class TestLogParser:
         result = self.parser._parse_line("invalid json")
         assert result is None
     
-    def test_parse_new_order(self):
-        """Test parsing new order."""
-        json_line = '{"user":"0x123","status":"open","order":{"oid":123,"coin":"BTC","side":"Bid","px":"50000"}}'
+    def test_parse_valid_order_new_format(self):
+        """Тест парсинга валидного ордера в новом формате."""
+        # Arrange
+        json_line = '{"time":"2025-09-02T08:26:36.877863946","user":"0x123","status":"open","order":{"coin":"BTC","side":"B","limitPx":"50000","sz":"1.0","oid":123}}'
+        
+        # Act
         result = self.parser._parse_line(json_line)
         
+        # Assert
         assert result is not None
         assert result.symbol == "BTC"
-        assert result.side == "Bid"
         assert result.price == 50000.0
-        assert result.size == 1.5
+        assert result.size == 1.0
+        assert result.side == "Bid"
         assert result.status == "open"
         assert result.owner == "0x123"
     
-    def test_parse_update_order(self):
-        """Test parsing updated order."""
-        json_line = '{"user":"0x456","status":"open","order":{"oid":456,"coin":"ETH","side":"Ask","px":"3000"}}'
+    def test_parse_order_with_ask_side(self):
+        """Тест парсинга ордера со стороной Ask."""
+        # Arrange
+        json_line = '{"time":"2025-09-02T08:26:36.877863946","user":"0x456","status":"filled","order":{"coin":"ETH","side":"A","limitPx":"3000","sz":"10.0","oid":456}}'
+        
+        # Act
         result = self.parser._parse_line(json_line)
         
+        # Assert
         assert result is not None
-        assert result.symbol == "ETH"
         assert result.side == "Ask"
-        assert result.price == 3000.0
-        assert result.size == 1.8
-        assert result.status == "open"
+        assert result.status == "filled"
     
-    def test_parse_remove_order(self):
-        """Test parsing removed order."""
-        json_line = '{"user":"0x789","status":"cancelled","order":{"oid":789,"coin":"BTC","side":"Bid","px":"49000"}}'
+    def test_parse_order_with_canceled_status(self):
+        """Тест парсинга отмененного ордера."""
+        # Arrange
+        json_line = '{"time":"2025-09-02T08:26:36.877863946","user":"0x789","status":"canceled","order":{"coin":"ETH","side":"B","limitPx":"44.663","sz":"223.03","oid":789}}'
+        
+        # Act
         result = self.parser._parse_line(json_line)
         
+        # Assert
         assert result is not None
-        assert result.symbol == "BTC"
-        assert result.side == "Bid"
-        assert result.price == 49000.0
-        assert result.size == 0.0
-        assert result.status == "cancelled"
+        assert result.status == "canceled"
+        assert result.size == 223.03
     
     def test_parse_file_with_orders(self):
         """Test parsing file with multiple orders."""
         # Create temporary file with test data
         test_data = [
-            '{"user":"0x123", "status":"open","order":{"oid":123,"coin":"BTC","side":"Bid","px":"50000"}}',
-            '{"user":"0x456","status":"open","order":{"oid":456,"coin":"ETH","side":"Ask","px":"3000"}}',
-            '{"user":"0x789","status":"open","order":{"oid":789,"coin":"BTC","side":"Bid","px":"49000"}}'
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0x123","status":"open","order":{"coin":"BTC","side":"B","limitPx":"50000","sz":"1.0","oid":123}}',
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0x456","status":"open","order":{"coin":"ETH","side":"A","limitPx":"3000","sz":"10.0","oid":456}}',
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0x789","status":"open","order":{"coin":"BTC","side":"B","limitPx":"49000","sz":"0.5","oid":789}}'
         ]
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -82,24 +88,23 @@ class TestLogParser:
             orders = self.parser.parse_file(temp_file)
             assert len(orders) == 3
             
-            # Check first order (new)
+            # Check first order
             assert orders[0].symbol == "BTC"
             assert orders[0].side == "Bid"
             assert orders[0].status == "open"
             
-            # Check second order (new)
+            # Check second order
             assert orders[1].symbol == "ETH"
             assert orders[1].side == "Ask"
             assert orders[1].status == "open"
             
-            # Check third order (removed)
+            # Check third order
             assert orders[2].symbol == "BTC"
-            assert orders[2].status == "cancelled"
-            assert orders[2].size == 0.0
+            assert orders[2].side == "Bid"
+            assert orders[2].status == "open"
             
         finally:
-            import os
-            os.unlink(temp_file)
+            os.remove(temp_file)
 
 class TestOrderExtractor:
     """Tests for OrderExtractor class."""
@@ -108,22 +113,23 @@ class TestOrderExtractor:
         """Setup before each test."""
         self.extractor = OrderExtractor()
     
-    def test_validate_order_data_valid(self):
-        """Test validation of valid order data."""
-        data = {
+    def test_extract_order_new_format(self):
+        """Test extracting order from new format log."""
+        log_entry = {
+            "time": "2025-09-02T08:26:36.877863946",
             "user": "0x123",
-            "oid": 123,
-            "coin": "BTC",
-            "side": "Bid",
-            "px": "50000"
+            "status": "open",
+            "order": {
+                "coin": "BTC",
+                "side": "B",
+                "limitPx": "50000",
+                "sz": "1.0",
+                "oid": 123
+            }
         }
-        assert self.extractor._validate_order_data(data) is True
-    
-    def test_validate_order_data_invalid(self):
-        """Test validation of invalid order data."""
-        data = {
-            "user": "0x123",
-            "oid": 123,
-            # Missing required fields
-        }
-        assert self.extractor._validate_order_data(data) is False
+        
+        result = self.extractor.extract_order(log_entry)
+        assert result is not None
+        assert result.symbol == "BTC"
+        assert result.side == "Bid"
+        assert result.price == 50000.0

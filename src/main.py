@@ -88,7 +88,7 @@ async def health_check():
         "order_manager_stats": {
             "open": status_counts.get("open", 0),
             "filled": status_counts.get("filled", 0),
-            "cancelled": status_counts.get("cancelled", 0),
+            "canceled": status_counts.get("canceled", 0),
             "triggered": status_counts.get("triggered", 0)
         }
     }

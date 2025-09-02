@@ -8,48 +8,41 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 class OrderExtractor:
-    """Extract order data from parsed log entries."""
+    """Извлекает Order объекты из логов нового формата."""
     
     def __init__(self):
-        """Initialize order extractor."""
         self.logger = get_logger(__name__)
     
-    def extract_order(self, data: Dict[str, Any]) -> Optional[Order]:
-        """Extract order from log data.
-        
-        Args:
-            data: Parsed log data
-            
-        Returns:
-            Order object if valid, None otherwise
-        """
+    def extract_order(self, log_entry: dict) -> Optional['Order']:
+        """Извлекает Order из нового формата лога."""
         try:
-            order = data["order"]
+            order_data = log_entry.get("order", {})
+            status = log_entry.get("status", "open")
             
-            order_id = str(order["oid"])
-            symbol = order["coin"]
-            side = convert_side(order["side"])
-            price = float(order["limitPx"])
-            size = float(order["sz"])
-            owner = data["user"]
-            timestamp = datetime.now()  # TODO: Extract from log timestamp
-            status = data["status"]
+            # Преобразование side: B->Bid, A->Ask
+            raw_side = order_data.get("side", "")
+            if raw_side == "B":
+                side = "Bid"
+            elif raw_side == "A":
+                side = "Ask"
+            else:
+                self.logger.warning(f"Неизвестная сторона ордера: {raw_side}")
+                return None
+            
+            # Нормализация статуса (обратная совместимость)
+            if status == "cancelled":
+                status = "canceled"  # Приводим к единому формату
             
             return Order(
-                id=order_id,
-                symbol=symbol,
+                id=str(order_data.get("oid")),
+                symbol=order_data.get("coin"),
                 side=side,
-                price=price,
-                size=size,
-                owner=owner,
-                timestamp=timestamp,
+                price=float(order_data.get("limitPx", 0)),
+                size=float(order_data.get("sz", 0)),
+                owner=log_entry.get("user"),
+                timestamp=datetime.fromisoformat(log_entry.get("time")),
                 status=status
             )
         except Exception as e:
-            self.logger.error(f"Failed to extract new order: {e}")
+            self.logger.warning(f"Ошибка извлечения ордера: {e}")
             return None
-    
-
-def convert_side(side: str) -> str:
-    """Convert side to Bid or Ask."""
-    return "Bid" if side.upper() == "B" else "Ask"

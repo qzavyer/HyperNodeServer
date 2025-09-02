@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # API limits
     MAX_ORDERS_PER_REQUEST: int = 1000
     
+    # Development settings (for compatibility)
+    DEBUG: bool = False
+    RELOAD: bool = False
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
