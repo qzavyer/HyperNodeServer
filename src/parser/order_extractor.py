@@ -44,5 +44,5 @@ class OrderExtractor:
                 status=status
             )
         except Exception as e:
-            self.logger.warning(f"Ошибка извлечения ордера: {e}")
+            self.logger.warning(f"Ошибка извлечения ордера: {e}\n{log_entry}")
             return None
