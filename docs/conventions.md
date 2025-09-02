@@ -196,7 +196,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     """Настройки приложения."""
-    NODE_LOGS_PATH: str = "~/hl/data/node_order_statuses/hourly"
+    NODE_LOGS_PATH: str = "/app/node_logs"
     CLEANUP_INTERVAL_HOURS: int = 2
     LOG_LEVEL: str = "DEBUG"
     API_HOST: str = "0.0.0.0"
