@@ -159,6 +159,7 @@ class TestOrderExtractor:
             "badAloPxRejected",
             "iocCancelRejected",
             "insufficientSpotBalanceRejected",
+            "marginCanceled",
             "minTradeNtlRejected",
             "perpMarginRejected",
             "reduceOnlyCanceled",

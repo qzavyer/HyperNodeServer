@@ -37,6 +37,7 @@ class OrderExtractor:
                 "badAloPxRejected",
                 "iocCancelRejected",
                 "insufficientSpotBalanceRejected",
+                "marginCanceled",
                 "minTradeNtlRejected",
                 "perpMarginRejected",
                 "reduceOnlyCanceled",
