@@ -157,13 +157,13 @@ class TestOrderExtractor:
         """Тест что отклоненные статусы возвращают None."""
         rejected_statuses = [
             "badAloPxRejected",
-            "perpMarginRejected", 
             "iocCancelRejected",
-            "selfTradeCanceled",
             "insufficientSpotBalanceRejected",
+            "minTradeNtlRejected",
+            "perpMarginRejected",
             "reduceOnlyCanceled",
             "reduceOnlyRejected",
-            "minTradeNtlRejected"
+            "selfTradeCanceled"
         ]
         
         for status in rejected_statuses:

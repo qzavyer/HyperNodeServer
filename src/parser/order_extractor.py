@@ -35,13 +35,13 @@ class OrderExtractor:
 
             not_created_statuses =  [
                 "badAloPxRejected",
-                "perpMarginRejected", 
                 "iocCancelRejected",
-                "selfTradeCanceled",
                 "insufficientSpotBalanceRejected",
+                "minTradeNtlRejected",
+                "perpMarginRejected",
                 "reduceOnlyCanceled",
                 "reduceOnlyRejected",
-                "minTradeNtlRejected"
+                "selfTradeCanceled"
             ]
 
             if status in not_created_statuses:
