@@ -33,6 +33,10 @@ class OrderExtractor:
             if status == "cancelled":
                 status = "canceled"  # Приводим к единому формату
 
+            not_created_statuses = ["badAloPxRejected", "perpMarginRejected"]
+            if status in not_created_statuses:
+                return None
+
             if status not in ["filled", "triggered", "open", "canceled"]:
                 self.logger.warning(f"Неизвестный статус ордера: {status}")
                 return None
