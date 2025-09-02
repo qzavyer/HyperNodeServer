@@ -11,9 +11,8 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./config:/app/config
-      - /path/to/node/logs:/app/node_logs:ro
+      - ${NODE_LOGS_PATH}:/app/node_logs:ro
     environment:
-      - NODE_LOGS_PATH=/app/node_logs
       - API_HOST=0.0.0.0
       - API_PORT=8000
       - LOG_LEVEL=INFO
