@@ -33,12 +33,14 @@ class OrderExtractor:
             if status == "cancelled":
                 status = "canceled"  # Приводим к единому формату
 
-            not_created_statuses = [
+            not_created_statuses =  [
                 "badAloPxRejected",
                 "perpMarginRejected", 
                 "iocCancelRejected",
+                "selfTradeCanceled",
                 "insufficientSpotBalanceRejected",
                 "reduceOnlyCanceled",
+                "reduceOnlyRejected",
                 "minTradeNtlRejected"
             ]
 
