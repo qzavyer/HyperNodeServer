@@ -79,7 +79,8 @@ class FileWatcher:
                 logger.info(f"Scanning latest file: {latest_file}")
                 await self._process_file_async(latest_file)
             else:
-                logger.info("No log files found for initial scan")
+                logger.debug(f"No log files found for initial scan\n{self.logs_path}")
+                logger.info(f"No log files found for initial scan")
         except Exception as e:
             logger.error(f"Error during initial file scan: {e}")
     
@@ -121,7 +122,7 @@ class FileWatcher:
     def _find_latest_file(self) -> Optional[Path]:
         """Finds the most recent log file."""
         try:
-            json_files = list(self.logs_path.rglob("*.json"))
+            json_files = list(self.logs_path.rglob("*"))
             if not json_files:
                 return None
             
