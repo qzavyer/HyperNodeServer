@@ -35,8 +35,8 @@ app.include_router(router, prefix="/api/v1")
 
 # Global instances
 file_storage = FileStorage()
-order_manager = OrderManager(file_storage)
 config_manager = ConfigManager()
+order_manager = OrderManager(file_storage, config_manager)
 file_watcher = FileWatcher(order_manager)
 
 @app.on_event("startup")

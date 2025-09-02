@@ -2,10 +2,13 @@
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, TYPE_CHECKING
 from src.storage.models import Order
 from src.storage.file_storage import FileStorage
 from src.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from src.storage.config_manager import ConfigManager
 
 logger = get_logger(__name__)
 
@@ -16,13 +19,15 @@ class OrderManagerError(Exception):
 class OrderManager:
     """Manage order state and status transitions."""
     
-    def __init__(self, storage: FileStorage):
+    def __init__(self, storage: FileStorage, config_manager: Optional['ConfigManager'] = None):
         """Initialize order manager.
         
         Args:
             storage: File storage instance
+            config_manager: Configuration manager for filtering rules
         """
         self.storage = storage
+        self.config_manager = config_manager
         self.orders: Dict[str, Order] = {}
         self.logger = get_logger(__name__)
     
@@ -42,6 +47,40 @@ class OrderManager:
         """Clear all orders from memory (for testing)."""
         self.orders.clear()
     
+    def _should_process_order(self, order: Order) -> bool:
+        """Check if order should be processed based on configuration.
+        
+        Args:
+            order: Order to check
+            
+        Returns:
+            True if order should be processed, False otherwise
+        """
+        if self.config_manager is None:
+            # If no config manager, process all orders
+            return True
+            
+        try:
+            config = self.config_manager.get_config()
+            
+            # Check if symbol is supported
+            if config.supported_symbols and order.symbol not in config.supported_symbols:
+                self.logger.debug(f"Order {order.id} skipped: symbol {order.symbol} not in supported_symbols")
+                return False
+            
+            # Check minimum liquidity requirement
+            if config.min_liquidity_by_symbol and order.symbol in config.min_liquidity_by_symbol:
+                min_liquidity = config.min_liquidity_by_symbol[order.symbol]
+                if order.size < min_liquidity:
+                    self.logger.debug(f"Order {order.id} skipped: size {order.size} < min_liquidity {min_liquidity} for {order.symbol}")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to check order filtering rules: {e}, processing order anyway")
+            return True
+    
     async def update_order(self, order: Order) -> None:
         """Update order status and data.
         
@@ -49,6 +88,11 @@ class OrderManager:
             order: Order to update
         """
         try:
+            # Check if order should be processed
+            if not self._should_process_order(order):
+                self.logger.debug(f"Order {order.id} filtered out by configuration rules")
+                return
+            
             order_id = order.id
             
             if order_id in self.orders:
@@ -75,14 +119,21 @@ class OrderManager:
         - If both filled and canceled are present simultaneously, chooses canceled and logs warning
         - Otherwise applies status priority: canceled > filled > triggered > open
         - Applies transition rules from current status to resolved status
+        - Filters orders based on configuration rules
 
         Args:
             orders: Orders to apply in one batch
         """
         try:
+            # Filter orders based on configuration
+            filtered_orders = [order for order in orders if self._should_process_order(order)]
+            
+            if len(filtered_orders) != len(orders):
+                self.logger.info(f"Filtered out {len(orders) - len(filtered_orders)} orders by configuration rules")
+            
             # Group by order id
             grouped: Dict[str, List[Order]] = {}
-            for order in orders:
+            for order in filtered_orders:
                 grouped.setdefault(order.id, []).append(order)
 
             for order_id, updates in grouped.items():
@@ -300,3 +351,12 @@ class OrderManager:
             self.logger.info(f"Removed {len(old_orders)} old orders")
         
         return len(old_orders)
+    
+    def set_config_manager(self, config_manager: 'ConfigManager') -> None:
+        """Set configuration manager for filtering rules.
+        
+        Args:
+            config_manager: Configuration manager instance
+        """
+        self.config_manager = config_manager
+        self.logger.info("Configuration manager set for order filtering")

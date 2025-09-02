@@ -57,9 +57,9 @@ class TestIntegration:
         """Test complete workflow from log parsing to API response."""
         # 1. Initialize components
         file_storage = FileStorage(str(self.data_dir))
-        
-        order_manager = OrderManager(file_storage)
         config_manager = ConfigManager(str(self.data_dir / "config.json"))
+        
+        order_manager = OrderManager(file_storage, config_manager)
         
         # 2. Load configuration
         with patch('src.storage.config_manager.settings') as mock_settings:
@@ -277,7 +277,8 @@ class TestIntegration:
         """Test error handling and recovery scenarios."""
         # Setup
         file_storage = FileStorage(str(self.data_dir))
-        order_manager = OrderManager(file_storage)
+        config_manager = ConfigManager(str(self.data_dir / "config.json"))
+        order_manager = OrderManager(file_storage, config_manager)
         await order_manager.initialize()
         
         # Test invalid order data
@@ -334,7 +335,8 @@ class TestIntegration:
         """Test performance with large dataset."""
         # Setup
         file_storage = FileStorage(str(self.data_dir))
-        order_manager = OrderManager(file_storage)
+        config_manager = ConfigManager(str(self.data_dir / "config.json"))
+        order_manager = OrderManager(file_storage, config_manager)
         
         # Clear any existing state before initialization
         order_manager.clear()

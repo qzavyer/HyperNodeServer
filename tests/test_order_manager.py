@@ -5,20 +5,23 @@ import asyncio
 import tempfile
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
+from pathlib import Path
 from typing import Set
 
 from src.storage.order_manager import OrderManager
 from src.storage.file_storage import FileStorage
-from src.storage.models import Order
+from src.storage.config_manager import ConfigManager
+from src.storage.models import Order, Config
 
 class TestOrderManager:
     """Tests for OrderManager class."""
     
     def setup_method(self):
         """Setup before each test."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.storage = FileStorage(self.temp_dir)
-        self.manager = OrderManager(self.storage)
+        self.temp_dir = Path(tempfile.mkdtemp())
+        self.storage = FileStorage(str(self.temp_dir))
+        self.config_manager = ConfigManager(str(self.temp_dir / "config.json"))
+        self.manager = OrderManager(self.storage, self.config_manager)
     
     def teardown_method(self):
         """Cleanup after each test."""
@@ -370,3 +373,149 @@ class TestOrderManager:
         await self.manager.update_orders_batch_async([triggered_update, open_update])
         final = self.manager.get_order_by_id("2")
         assert final.status == "triggered"
+    
+    @pytest.mark.asyncio
+    async def test_order_filtering_by_symbol(self):
+        """Test order filtering by supported symbols."""
+        # Create config with limited symbols
+        config = Config(
+            node_logs_path="/test/path",
+            cleanup_interval_hours=2,
+            api_host="0.0.0.0",
+            api_port=8000,
+            log_level="DEBUG",
+            log_file_path="logs/app.log",
+            log_max_size_mb=100,
+            log_retention_days=30,
+            data_dir="data",
+            config_file_path="config/config.json",
+            max_orders_per_request=1000,
+            file_read_retry_attempts=3,
+            file_read_retry_delay=1.0,
+            min_liquidity_by_symbol={},
+            supported_symbols=["BTC", "ETH"]  # Only BTC and ETH supported
+        )
+        
+        # Mock config manager
+        with patch.object(self.config_manager, 'get_config', return_value=config):
+            # Try to add BTC order (should work)
+            btc_order = Order(
+                id="btc_order",
+                symbol="BTC",
+                side="Bid",
+                price=50000.0,
+                size=1.0,
+                owner="0x123",
+                timestamp=datetime.now(),
+                status="open"
+            )
+            await self.manager.update_order(btc_order)
+            assert self.manager.get_order_count() == 1
+            
+            # Try to add SOL order (should be filtered out)
+            sol_order = Order(
+                id="sol_order",
+                symbol="SOL",
+                side="Ask",
+                price=100.0,
+                size=10.0,
+                owner="0x456",
+                timestamp=datetime.now(),
+                status="open"
+            )
+            await self.manager.update_order(sol_order)
+            assert self.manager.get_order_count() == 1  # Still only 1 order
+            
+            # Try to add ETH order (should work)
+            eth_order = Order(
+                id="eth_order",
+                symbol="ETH",
+                side="Ask",
+                price=3000.0,
+                size=5.0,
+                owner="0x789",
+                timestamp=datetime.now(),
+                status="open"
+            )
+            await self.manager.update_order(eth_order)
+            assert self.manager.get_order_count() == 2  # Now 2 orders
+    
+    @pytest.mark.asyncio
+    async def test_order_filtering_by_liquidity(self):
+        """Test order filtering by minimum liquidity requirements."""
+        # Create config with liquidity requirements
+        config = Config(
+            node_logs_path="/test/path",
+            cleanup_interval_hours=2,
+            api_host="0.0.0.0",
+            api_port=8000,
+            log_level="DEBUG",
+            log_file_path="logs/app.log",
+            log_max_size_mb=100,
+            log_retention_days=30,
+            data_dir="data",
+            config_file_path="config/config.json",
+            max_orders_per_request=1000,
+            file_read_retry_attempts=3,
+            file_read_retry_delay=1.0,
+            min_liquidity_by_symbol={"BTC": 2.0, "ETH": 5.0},  # BTC min 2.0, ETH min 5.0
+            supported_symbols=["BTC", "ETH"]
+        )
+        
+        # Mock config manager
+        with patch.object(self.config_manager, 'get_config', return_value=config):
+            # Try to add BTC order with insufficient size (should be filtered out)
+            small_btc_order = Order(
+                id="small_btc",
+                symbol="BTC",
+                side="Bid",
+                price=50000.0,
+                size=1.0,  # Less than required 2.0
+                owner="0x123",
+                timestamp=datetime.now(),
+                status="open"
+            )
+            await self.manager.update_order(small_btc_order)
+            assert self.manager.get_order_count() == 0
+            
+            # Try to add BTC order with sufficient size (should work)
+            large_btc_order = Order(
+                id="large_btc",
+                symbol="BTC",
+                side="Bid",
+                price=50000.0,
+                size=3.0,  # More than required 2.0
+                owner="0x123",
+                timestamp=datetime.now(),
+                status="open"
+            )
+            await self.manager.update_order(large_btc_order)
+            assert self.manager.get_order_count() == 1
+            
+            # Try to add ETH order with insufficient size (should be filtered out)
+            small_eth_order = Order(
+                id="small_eth",
+                symbol="ETH",
+                side="Ask",
+                price=3000.0,
+                size=2.0,  # Less than required 5.0
+                owner="0x456",
+                timestamp=datetime.now(),
+                status="open"
+            )
+            await self.manager.update_order(small_eth_order)
+            assert self.manager.get_order_count() == 1  # Still only 1 order
+            
+            # Try to add ETH order with sufficient size (should work)
+            large_eth_order = Order(
+                id="large_eth",
+                symbol="ETH",
+                side="Ask",
+                price=3000.0,
+                size=10.0,  # More than required 5.0
+                owner="0x456",
+                timestamp=datetime.now(),
+                status="open"
+            )
+            await self.manager.update_order(large_eth_order)
+            assert self.manager.get_order_count() == 2  # Now 2 orders
