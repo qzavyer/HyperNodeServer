@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     """Application settings."""
     
     # Node logs path
-    NODE_LOGS_PATH: str = "~/hl/data/node_order_statuses/hourly"
+    NODE_LOGS_PATH: str = "/app/node_logs"
     
     # Cleanup settings
     CLEANUP_INTERVAL_HOURS: int = 2

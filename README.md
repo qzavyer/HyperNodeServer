@@ -129,7 +129,7 @@ curl -X PUT http://localhost:8000/api/v1/config \
 
 | Параметр | Описание | По умолчанию |
 |----------|----------|--------------|
-| `NODE_LOGS_PATH` | Путь к логам node | `~/hl/data/node_order_statuses/hourly` |
+| `NODE_LOGS_PATH` | Путь к логам node | `/app/node_logs` |
 | `API_HOST` | Host для API | `0.0.0.0` |
 | `API_PORT` | Порт для API | `8000` |
 | `LOG_LEVEL` | Уровень логирования | `DEBUG` |

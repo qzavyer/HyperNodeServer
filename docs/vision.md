@@ -475,7 +475,7 @@ services:
       - ./data:/app/data
       - ~/hl/data:/hl/data:ro
     environment:
-      - NODE_LOGS_PATH=/hl/data/node_order_statuses/hourly
+      - NODE_LOGS_PATH=/app/node_logs
     restart: unless-stopped
 ```
 
@@ -539,7 +539,7 @@ WantedBy=multi-user.target
 
 **Пример .env:**
 ```env
-NODE_LOGS_PATH=~/hl/data/node_order_statuses/hourly
+NODE_LOGS_PATH=/app/node_logs
 CLEANUP_INTERVAL_HOURS=2
 SCAN_INTERVAL_SECONDS=30
 API_HOST=0.0.0.0
