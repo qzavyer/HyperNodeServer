@@ -163,7 +163,8 @@ class TestOrderExtractor:
             "perpMarginRejected",
             "reduceOnlyCanceled",
             "reduceOnlyRejected",
-            "selfTradeCanceled"
+            "selfTradeCanceled",
+            "siblingFilledCanceled"
         ]
         
         for status in rejected_statuses:

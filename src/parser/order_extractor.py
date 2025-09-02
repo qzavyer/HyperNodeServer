@@ -41,7 +41,8 @@ class OrderExtractor:
                 "perpMarginRejected",
                 "reduceOnlyCanceled",
                 "reduceOnlyRejected",
-                "selfTradeCanceled"
+                "selfTradeCanceled",
+                "siblingFilledCanceled"
             ]
 
             if status in not_created_statuses:
