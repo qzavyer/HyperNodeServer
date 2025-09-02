@@ -32,6 +32,10 @@ class OrderExtractor:
             # Нормализация статуса (обратная совместимость)
             if status == "cancelled":
                 status = "canceled"  # Приводим к единому формату
+
+            if status not in ["filled", "triggered", "open", "canceled"]:
+                self.logger.warning(f"Неизвестный статус ордера: {status}")
+                return None
             
             return Order(
                 id=str(order_data.get("oid")),
