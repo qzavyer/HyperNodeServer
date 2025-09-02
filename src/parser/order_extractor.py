@@ -40,6 +40,7 @@ class OrderExtractor:
                 "marginCanceled",
                 "minTradeNtlRejected",
                 "perpMarginRejected",
+                "perpMaxPositionRejected",
                 "reduceOnlyCanceled",
                 "reduceOnlyRejected",
                 "selfTradeCanceled",

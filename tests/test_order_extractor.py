@@ -162,6 +162,7 @@ class TestOrderExtractor:
             "marginCanceled",
             "minTradeNtlRejected",
             "perpMarginRejected",
+            "perpMaxPositionRejected",
             "reduceOnlyCanceled",
             "reduceOnlyRejected",
             "selfTradeCanceled",
