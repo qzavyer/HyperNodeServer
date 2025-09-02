@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from datetime import datetime
 
 from src.main import app
-from src.storage.models import Order, Config
+from src.storage.models import Order, Config, SymbolConfig
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 
@@ -44,8 +44,7 @@ class TestAPIRoutes:
             max_orders_per_request=1000,
             file_read_retry_attempts=3,
             file_read_retry_delay=1.0,
-            min_liquidity_by_symbol={},
-            supported_symbols=[]
+            symbols_config=[]
         )
     
     @patch('src.main.order_manager')
@@ -184,8 +183,7 @@ class TestAPIRoutes:
         assert data["max_orders_per_request"] == 1000
         assert data["file_read_retry_attempts"] == 3
         assert data["file_read_retry_delay"] == 1.0
-        assert data["min_liquidity_by_symbol"] == {}
-        assert data["supported_symbols"] == []
+        assert data["symbols_config"] == []
     
     @patch('src.main.config_manager')
     def test_get_config_error(self, mock_config_manager):
@@ -217,8 +215,9 @@ class TestAPIRoutes:
             max_orders_per_request=2000,
             file_read_retry_attempts=5,
             file_read_retry_delay=2.0,
-            min_liquidity_by_symbol={"BTC": 1000.0},
-            supported_symbols=["BTC", "ETH"]
+            symbols_config=[
+                SymbolConfig(symbol="BTC", min_liquidity=1000.0, price_deviation=0.01)
+            ]
         )
         
         # Mock the update method to return the updated config

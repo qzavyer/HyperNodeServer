@@ -166,11 +166,23 @@ curl "http://localhost:8000/api/v1/config"
   "max_orders_per_request": 1000,
   "file_read_retry_attempts": 3,
   "file_read_retry_delay": 1.0,
-  "min_liquidity_by_symbol": {
-    "BTC": 1000.0,
-    "ETH": 500.0
-  },
-  "supported_symbols": ["BTC", "ETH", "SOL"]
+  "symbols_config": [
+    {
+      "symbol": "BTC",
+      "min_liquidity": 1000.0,
+      "price_deviation": 0.03
+    },
+    {
+      "symbol": "ETH", 
+      "min_liquidity": 500.0,
+      "price_deviation": 0.05
+    },
+    {
+      "symbol": "SOL",
+      "min_liquidity": 100.0,
+      "price_deviation": 0.02
+    }
+  ]
 }
 ```
 
@@ -183,10 +195,13 @@ curl "http://localhost:8000/api/v1/config"
 {
   "api_port": 9000,
   "log_level": "INFO",
-  "min_liquidity_by_symbol": {
-    "BTC": 2000.0
-  },
-  "supported_symbols": ["BTC", "ETH", "SOL", "MATIC"]
+  "symbols_config": [
+    {
+      "symbol": "BTC",
+      "min_liquidity": 2000.0,
+      "price_deviation": 0.02
+    }
+  ]
 }
 ```
 
@@ -213,10 +228,18 @@ curl -X PUT "http://localhost:8000/api/v1/config" \
   "max_orders_per_request": 1000,
   "file_read_retry_attempts": 3,
   "file_read_retry_delay": 1.0,
-  "min_liquidity_by_symbol": {
-    "BTC": 2000.0
-  },
-  "supported_symbols": ["BTC", "ETH", "SOL", "MATIC"]
+  "symbols_config": [
+    {
+      "symbol": "BTC",
+      "min_liquidity": 2000.0,
+      "price_deviation": 0.02
+    },
+    {
+      "symbol": "ETH",
+      "min_liquidity": 1000.0,
+      "price_deviation": 0.03
+    }
+  ]
 }
 ```
 
@@ -257,8 +280,7 @@ curl -X PUT "http://localhost:8000/api/v1/config" \
   "max_orders_per_request": "integer",  // Максимум ордеров в запросе
   "file_read_retry_attempts": "integer", // Попытки чтения файла
   "file_read_retry_delay": "float",     // Задержка между попытками
-  "min_liquidity_by_symbol": "object",  // Минимальная ликвидность по символам
-  "supported_symbols": "array"          // Поддерживаемые символы
+  "symbols_config": "array"             // Конфигурация символов
 }
 ```
 

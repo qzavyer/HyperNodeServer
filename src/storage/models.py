@@ -28,6 +28,12 @@ class ParsedData(BaseModel):
     orders: list[Order] = Field(default_factory=list, description="List of parsed orders")
     log_entries: list[LogEntry] = Field(default_factory=list, description="List of log entries")
 
+class SymbolConfig(BaseModel):
+    """Configuration for a specific symbol."""
+    symbol: str = Field(..., description="Symbol name (e.g., BTC, ETH)")
+    min_liquidity: float = Field(..., ge=0, description="Minimum liquidity required for this symbol")
+    price_deviation: float = Field(..., ge=0, le=1, description="Maximum allowed price deviation (0.0-1.0)")
+
 class Config(BaseModel):
     """Configuration model."""
     node_logs_path: str = Field(..., description="Path to node logs directory")
@@ -43,5 +49,4 @@ class Config(BaseModel):
     max_orders_per_request: int = Field(..., ge=1, le=10000, description="Maximum orders per request")
     file_read_retry_attempts: int = Field(..., ge=1, le=10, description="File read retry attempts")
     file_read_retry_delay: float = Field(..., ge=0.1, le=10.0, description="File read retry delay in seconds")
-    min_liquidity_by_symbol: Dict[str, float] = Field(default_factory=dict, description="Minimum liquidity by symbol")
-    supported_symbols: list[str] = Field(default_factory=list, description="List of supported symbols")
+    symbols_config: list[SymbolConfig] = Field(default_factory=list, description="Configuration for supported symbols")

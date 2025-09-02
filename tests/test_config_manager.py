@@ -68,8 +68,7 @@ class TestConfigManager:
             assert config.max_orders_per_request == 500
             assert config.file_read_retry_attempts == 2
             assert config.file_read_retry_delay == 0.5
-            assert config.min_liquidity_by_symbol == {}
-            assert config.supported_symbols == []
+            assert config.symbols_config == []
     
     @pytest.mark.asyncio
     async def test_load_config_async_loads_existing_file(self):
@@ -89,8 +88,10 @@ class TestConfigManager:
             "max_orders_per_request": 2000,
             "file_read_retry_attempts": 5,
             "file_read_retry_delay": 2.0,
-            "min_liquidity_by_symbol": {"BTC": 1000.0},
-            "supported_symbols": ["BTC", "ETH"]
+            "symbols_config": [
+                {"symbol": "BTC", "min_liquidity": 1000.0, "price_deviation": 0.01},
+                {"symbol": "ETH", "min_liquidity": 500.0, "price_deviation": 0.02}
+            ]
         }
         
         with open(self.config_file, 'w') as f:
@@ -112,8 +113,11 @@ class TestConfigManager:
         assert config.max_orders_per_request == 2000
         assert config.file_read_retry_attempts == 5
         assert config.file_read_retry_delay == 2.0
-        assert config.min_liquidity_by_symbol == {"BTC": 1000.0}
-        assert config.supported_symbols == ["BTC", "ETH"]
+        assert len(config.symbols_config) == 2
+        assert config.symbols_config[0].symbol == "BTC"
+        assert config.symbols_config[0].min_liquidity == 1000.0
+        assert config.symbols_config[1].symbol == "ETH"
+        assert config.symbols_config[1].min_liquidity == 500.0
     
     @pytest.mark.asyncio
     async def test_load_config_async_handles_invalid_json(self):
@@ -188,14 +192,18 @@ class TestConfigManager:
             updates = {
                 "api_port": 9999,
                 "log_level": "ERROR",
-                "min_liquidity_by_symbol": {"BTC": 5000.0}
+                "symbols_config": [
+                    {"symbol": "BTC", "min_liquidity": 5000.0, "price_deviation": 0.01}
+                ]
             }
             
             updated_config = await self.manager.update_config_async(updates)
             
             assert updated_config.api_port == 9999
             assert updated_config.log_level == "ERROR"
-            assert updated_config.min_liquidity_by_symbol == {"BTC": 5000.0}
+            assert len(updated_config.symbols_config) == 1
+            assert updated_config.symbols_config[0].symbol == "BTC"
+            assert updated_config.symbols_config[0].min_liquidity == 5000.0
             
             # Verify file was updated
             with open(self.config_file, 'r') as f:
@@ -203,7 +211,9 @@ class TestConfigManager:
             
             assert saved_data["api_port"] == 9999
             assert saved_data["log_level"] == "ERROR"
-            assert saved_data["min_liquidity_by_symbol"] == {"BTC": 5000.0}
+            assert len(saved_data["symbols_config"]) == 1
+            assert saved_data["symbols_config"][0]["symbol"] == "BTC"
+            assert saved_data["symbols_config"][0]["min_liquidity"] == 5000.0
     
     @pytest.mark.asyncio
     async def test_update_config_async_handles_invalid_updates(self):

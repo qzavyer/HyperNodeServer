@@ -143,6 +143,5 @@ class ConfigManager:
             max_orders_per_request=settings.MAX_ORDERS_PER_REQUEST,
             file_read_retry_attempts=settings.FILE_READ_RETRY_ATTEMPTS,
             file_read_retry_delay=settings.FILE_READ_RETRY_DELAY,
-            min_liquidity_by_symbol={},
-            supported_symbols=[]
+            symbols_config=[]
         )

@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 from typing import Set
 
 from src.main import app
-from src.storage.models import Order
+from src.storage.models import Order, Config, SymbolConfig
 from datetime import datetime
 
 client = TestClient(app)
@@ -139,8 +139,7 @@ class TestAPI:
             max_orders_per_request=1000,
             file_read_retry_attempts=3,
             file_read_retry_delay=1.0,
-            min_liquidity_by_symbol={},
-            supported_symbols=[]
+            symbols_config=[]
         )
         mock_config_manager.get_config.return_value = mock_config
         

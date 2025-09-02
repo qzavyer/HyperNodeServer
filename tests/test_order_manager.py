@@ -11,7 +11,7 @@ from typing import Set
 from src.storage.order_manager import OrderManager
 from src.storage.file_storage import FileStorage
 from src.storage.config_manager import ConfigManager
-from src.storage.models import Order, Config
+from src.storage.models import Order, Config, SymbolConfig
 
 class TestOrderManager:
     """Tests for OrderManager class."""
@@ -392,8 +392,10 @@ class TestOrderManager:
             max_orders_per_request=1000,
             file_read_retry_attempts=3,
             file_read_retry_delay=1.0,
-            min_liquidity_by_symbol={},
-            supported_symbols=["BTC", "ETH"]  # Only BTC and ETH supported
+            symbols_config=[
+                SymbolConfig(symbol="BTC", min_liquidity=0.0, price_deviation=0.01),
+                SymbolConfig(symbol="ETH", min_liquidity=0.0, price_deviation=0.01)
+            ]
         )
         
         # Mock config manager
@@ -458,19 +460,21 @@ class TestOrderManager:
             max_orders_per_request=1000,
             file_read_retry_attempts=3,
             file_read_retry_delay=1.0,
-            min_liquidity_by_symbol={"BTC": 2.0, "ETH": 5.0},  # BTC min 2.0, ETH min 5.0
-            supported_symbols=["BTC", "ETH"]
+            symbols_config=[
+                SymbolConfig(symbol="BTC", min_liquidity=100000.0, price_deviation=0.01),  # BTC min 100k liquidity
+                SymbolConfig(symbol="ETH", min_liquidity=15000.0, price_deviation=0.01)   # ETH min 15k liquidity
+            ]
         )
         
         # Mock config manager
         with patch.object(self.config_manager, 'get_config', return_value=config):
-            # Try to add BTC order with insufficient size (should be filtered out)
+            # Try to add BTC order with insufficient liquidity (should be filtered out)
             small_btc_order = Order(
                 id="small_btc",
                 symbol="BTC",
                 side="Bid",
                 price=50000.0,
-                size=1.0,  # Less than required 2.0
+                size=1.0,  # Liquidity = 50000 * 1.0 = 50000 < 100000
                 owner="0x123",
                 timestamp=datetime.now(),
                 status="open"
@@ -478,13 +482,13 @@ class TestOrderManager:
             await self.manager.update_order(small_btc_order)
             assert self.manager.get_order_count() == 0
             
-            # Try to add BTC order with sufficient size (should work)
+            # Try to add BTC order with sufficient liquidity (should work)
             large_btc_order = Order(
                 id="large_btc",
                 symbol="BTC",
                 side="Bid",
                 price=50000.0,
-                size=3.0,  # More than required 2.0
+                size=3.0,  # Liquidity = 50000 * 3.0 = 150000 > 100000
                 owner="0x123",
                 timestamp=datetime.now(),
                 status="open"
@@ -492,13 +496,13 @@ class TestOrderManager:
             await self.manager.update_order(large_btc_order)
             assert self.manager.get_order_count() == 1
             
-            # Try to add ETH order with insufficient size (should be filtered out)
+            # Try to add ETH order with insufficient liquidity (should be filtered out)
             small_eth_order = Order(
                 id="small_eth",
                 symbol="ETH",
                 side="Ask",
                 price=3000.0,
-                size=2.0,  # Less than required 5.0
+                size=2.0,  # Liquidity = 3000 * 2.0 = 6000 < 15000
                 owner="0x456",
                 timestamp=datetime.now(),
                 status="open"
@@ -506,13 +510,13 @@ class TestOrderManager:
             await self.manager.update_order(small_eth_order)
             assert self.manager.get_order_count() == 1  # Still only 1 order
             
-            # Try to add ETH order with sufficient size (should work)
+            # Try to add ETH order with sufficient liquidity (should work)
             large_eth_order = Order(
                 id="large_eth",
                 symbol="ETH",
                 side="Ask",
                 price=3000.0,
-                size=10.0,  # More than required 5.0
+                size=10.0,  # Liquidity = 3000 * 10.0 = 30000 > 15000
                 owner="0x456",
                 timestamp=datetime.now(),
                 status="open"

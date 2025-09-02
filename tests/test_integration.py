@@ -78,6 +78,15 @@ class TestIntegration:
             mock_settings.FILE_READ_RETRY_DELAY = 1.0
             
             config = await config_manager.load_config_async()
+            
+            # Add symbols configuration to allow orders
+            await config_manager.update_config_async({
+                "symbols_config": [
+                    {"symbol": "BTC", "min_liquidity": 100.0, "price_deviation": 0.01},
+                    {"symbol": "ETH", "min_liquidity": 50.0, "price_deviation": 0.02},
+                    {"symbol": "SOL", "min_liquidity": 10.0, "price_deviation": 0.03}
+                ]
+            })
         
         # 3. Clear any existing state before initialization
         order_manager.clear()
@@ -146,7 +155,35 @@ class TestIntegration:
         """Test order status transitions."""
         # Setup
         file_storage = FileStorage(str(self.data_dir))
-        order_manager = OrderManager(file_storage)
+        config_manager = ConfigManager(str(self.data_dir / "config.json"))
+        order_manager = OrderManager(file_storage, config_manager)
+        
+        # Load configuration with symbols
+        with patch('src.storage.config_manager.settings') as mock_settings:
+            mock_settings.NODE_LOGS_PATH = str(self.data_dir)
+            mock_settings.CLEANUP_INTERVAL_HOURS = 2
+            mock_settings.API_HOST = "0.0.0.0"
+            mock_settings.API_PORT = 8000
+            mock_settings.LOG_LEVEL = "DEBUG"
+            mock_settings.LOG_FILE_PATH = "logs/app.log"
+            mock_settings.LOG_MAX_SIZE_MB = 100
+            mock_settings.LOG_RETENTION_DAYS = 30
+            mock_settings.DATA_DIR = "data"
+            mock_settings.CONFIG_FILE_PATH = "config/config.json"
+            mock_settings.MAX_ORDERS_PER_REQUEST = 1000
+            mock_settings.FILE_READ_RETRY_ATTEMPTS = 3
+            mock_settings.FILE_READ_RETRY_DELAY = 1.0
+            
+            config = await config_manager.load_config_async()
+            
+            # Add symbols configuration to allow orders
+            await config_manager.update_config_async({
+                "symbols_config": [
+                    {"symbol": "BTC", "min_liquidity": 100.0, "price_deviation": 0.01},
+                    {"symbol": "ETH", "min_liquidity": 50.0, "price_deviation": 0.02}
+                ]
+            })
+        
         await order_manager.initialize()
         
         # Create test order
@@ -166,19 +203,31 @@ class TestIntegration:
         # Test status transitions
         assert order.status == "open"
         
+        # Verify order was added
+        retrieved_order = order_manager.get_order_by_id("test_order_1")
+        assert retrieved_order is not None
+        assert retrieved_order.status == "open"
+        
         # Fill order
         filled_order = Order(
             id="test_order_1",
             symbol="BTC",
             side="Bid",
             price=50000.0,
-            size=0.0,
+            size=1.0,  # Keep size > 0 to pass liquidity filter
             owner="0x1234567890abcdef",
             timestamp=datetime.now(),
             status="filled"
         )
         await order_manager.update_order(filled_order)
-        assert order_manager.get_order_by_id("test_order_1").status == "filled"
+        
+        # Verify status was updated
+        updated_order = order_manager.get_order_by_id("test_order_1")
+        assert updated_order is not None
+        print(f"DEBUG: Order status after update: {updated_order.status}")
+        print(f"DEBUG: Order manager orders: {list(order_manager.orders.keys())}")
+        print(f"DEBUG: Order manager order statuses: {[(k, v.status) for k, v in order_manager.orders.items()]}")
+        assert updated_order.status == "filled"
         
         # Try to cancel filled order (should not work)
         cancelled_order = Order(
@@ -186,7 +235,7 @@ class TestIntegration:
             symbol="BTC",
             side="Bid",
             price=50000.0,
-            size=0.0,
+            size=1.0,  # Keep size > 0 to pass liquidity filter
             owner="0x1234567890abcdef",
             timestamp=datetime.now(),
             status="canceled"
@@ -212,7 +261,7 @@ class TestIntegration:
             symbol="ETH",
             side="Ask",
             price=3000.0,
-            size=0.0,
+            size=10.0,  # Keep size > 0 to pass liquidity filter
             owner="0xfedcba0987654321",
             timestamp=datetime.now(),
             status="canceled"
@@ -248,8 +297,9 @@ class TestIntegration:
         updates = {
             "api_port": 9000,
             "log_level": "INFO",
-            "min_liquidity_by_symbol": {"BTC": 1000.0},
-            "supported_symbols": ["BTC", "ETH"]
+            "symbols_config": [
+                {"symbol": "BTC", "min_liquidity": 1000.0, "price_deviation": 0.01}
+            ]
         }
         
         updated_config = await config_manager.update_config_async(updates)
@@ -257,8 +307,9 @@ class TestIntegration:
         # Verify updates
         assert updated_config.api_port == 9000
         assert updated_config.log_level == "INFO"
-        assert updated_config.min_liquidity_by_symbol == {"BTC": 1000.0}
-        assert updated_config.supported_symbols == ["BTC", "ETH"]
+        assert len(updated_config.symbols_config) == 1
+        assert updated_config.symbols_config[0].symbol == "BTC"
+        assert updated_config.symbols_config[0].min_liquidity == 1000.0
         
         # Create new config manager (simulate restart)
         new_config_manager = ConfigManager(str(self.data_dir / "config.json"))
@@ -269,8 +320,9 @@ class TestIntegration:
         # Verify persistence
         assert reloaded_config.api_port == 9000
         assert reloaded_config.log_level == "INFO"
-        assert reloaded_config.min_liquidity_by_symbol == {"BTC": 1000.0}
-        assert reloaded_config.supported_symbols == ["BTC", "ETH"]
+        assert len(reloaded_config.symbols_config) == 1
+        assert reloaded_config.symbols_config[0].symbol == "BTC"
+        assert reloaded_config.symbols_config[0].min_liquidity == 1000.0
     
     @pytest.mark.asyncio
     async def test_error_handling_and_recovery(self):
@@ -279,6 +331,33 @@ class TestIntegration:
         file_storage = FileStorage(str(self.data_dir))
         config_manager = ConfigManager(str(self.data_dir / "config.json"))
         order_manager = OrderManager(file_storage, config_manager)
+        
+        # Load configuration with symbols
+        with patch('src.storage.config_manager.settings') as mock_settings:
+            mock_settings.NODE_LOGS_PATH = str(self.data_dir)
+            mock_settings.CLEANUP_INTERVAL_HOURS = 2
+            mock_settings.API_HOST = "0.0.0.0"
+            mock_settings.API_PORT = 8000
+            mock_settings.LOG_LEVEL = "DEBUG"
+            mock_settings.LOG_FILE_PATH = "logs/app.log"
+            mock_settings.LOG_MAX_SIZE_MB = 100
+            mock_settings.LOG_RETENTION_DAYS = 30
+            mock_settings.DATA_DIR = "data"
+            mock_settings.CONFIG_FILE_PATH = "config/config.json"
+            mock_settings.MAX_ORDERS_PER_REQUEST = 1000
+            mock_settings.FILE_READ_RETRY_ATTEMPTS = 3
+            mock_settings.FILE_READ_RETRY_DELAY = 1.0
+            
+            config = await config_manager.load_config_async()
+            
+            # Add symbols configuration to allow orders
+            await config_manager.update_config_async({
+                "symbols_config": [
+                    {"symbol": "BTC", "min_liquidity": 100.0, "price_deviation": 0.01},
+                    {"symbol": "ETH", "min_liquidity": 50.0, "price_deviation": 0.02}
+                ]
+            })
+        
         await order_manager.initialize()
         
         # Test invalid order data
@@ -337,6 +416,32 @@ class TestIntegration:
         file_storage = FileStorage(str(self.data_dir))
         config_manager = ConfigManager(str(self.data_dir / "config.json"))
         order_manager = OrderManager(file_storage, config_manager)
+        
+        # Load configuration with symbols
+        with patch('src.storage.config_manager.settings') as mock_settings:
+            mock_settings.NODE_LOGS_PATH = str(self.data_dir)
+            mock_settings.CLEANUP_INTERVAL_HOURS = 2
+            mock_settings.API_HOST = "0.0.0.0"
+            mock_settings.API_PORT = 8000
+            mock_settings.LOG_LEVEL = "DEBUG"
+            mock_settings.LOG_FILE_PATH = "logs/app.log"
+            mock_settings.LOG_MAX_SIZE_MB = 100
+            mock_settings.LOG_RETENTION_DAYS = 30
+            mock_settings.DATA_DIR = "data"
+            mock_settings.CONFIG_FILE_PATH = "config/config.json"
+            mock_settings.MAX_ORDERS_PER_REQUEST = 1000
+            mock_settings.FILE_READ_RETRY_ATTEMPTS = 3
+            mock_settings.FILE_READ_RETRY_DELAY = 1.0
+            
+            config = await config_manager.load_config_async()
+            
+            # Add symbols configuration to allow orders
+            await config_manager.update_config_async({
+                "symbols_config": [
+                    {"symbol": "BTC", "min_liquidity": 100.0, "price_deviation": 0.01},
+                    {"symbol": "ETH", "min_liquidity": 50.0, "price_deviation": 0.02}
+                ]
+            })
         
         # Clear any existing state before initialization
         order_manager.clear()

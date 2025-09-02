@@ -165,6 +165,7 @@ class TestOrderExtractor:
             "perpMaxPositionRejected",
             "reduceOnlyCanceled",
             "reduceOnlyRejected",
+            "scheduledCancel",
             "selfTradeCanceled",
             "siblingFilledCanceled"
         ]

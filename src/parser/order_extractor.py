@@ -43,11 +43,14 @@ class OrderExtractor:
                 "perpMaxPositionRejected",
                 "reduceOnlyCanceled",
                 "reduceOnlyRejected",
+                "scheduledCancel",
                 "selfTradeCanceled",
                 "siblingFilledCanceled"
             ]
 
             if status in not_created_statuses:
+                if status == "scheduledCancel":
+                    self.logger.info(f"Scheduled cancel: {log_entry}")
                 return None
 
             if status not in ["filled", "triggered", "open", "canceled"]:
