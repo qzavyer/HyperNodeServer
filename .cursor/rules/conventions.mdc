@@ -199,7 +199,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     """Настройки приложения."""
-    NODE_LOGS_PATH: str = "~/hl/data/node_raw_book_diffs/hourly"
+    NODE_LOGS_PATH: str = "~/hl/data/node_order_statuses/hourly"
     CLEANUP_INTERVAL_HOURS: int = 2
     LOG_LEVEL: str = "DEBUG"
     API_HOST: str = "0.0.0.0"
@@ -495,7 +495,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     """Настройки приложения."""
-    NODE_LOGS_PATH: str = "~/hl/data/node_raw_book_diffs/hourly"
+    NODE_LOGS_PATH: str = "~/hl/data/node_order_statuses/hourly"
     CLEANUP_INTERVAL_HOURS: int = 2
     LOG_LEVEL: str = "DEBUG"
     API_HOST: str = "0.0.0.0"

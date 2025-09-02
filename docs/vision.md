@@ -232,36 +232,56 @@ hyperliquid-parser/
 ```json
 // Новый ордер
 {
-  "user": "0x768484f7e2ebb675c57838366c02ae99ba2a9b08",
-  "oid": 35061046831,
-  "coin": "CHILLGUY",
-  "side": "Bid",
-  "px": "1.36",
-  "raw_book_diff": {
-    "new": {"sz": "186910.0"}
-  }
-}
-
-// Обновление ордера
-{
-  "user": "0x768484f7e2ebb675c57838366c02ae99ba2a9b08",
-  "oid": 35061055064,
-  "coin": "BTC",
-  "side": "Bid",
-  "px": "115323.2",
-  "raw_book_diff": {
-    "update": {"origSz": "0.2086", "newSz": "0.2076"}
+  "time":"2025-09-02T08:26:36.877863946",
+  "user":"0xc926ddba8b7617dbc65712f20cf8e1b58b8598d3",
+  "hash":null,
+  "builder":null,
+  "status":"open",
+  "order":{
+    "coin":"@151",
+    "side":"A",
+    "limitPx":"4399.3",
+    "sz":"20.0",
+    "oid":150926011357,
+    "timestamp":1756801591002,
+    "triggerCondition":"N/A",
+    "isTrigger":false,
+    "triggerPx":"0.0",
+    "children":[],
+    "isPositionTpsl":false,
+    "reduceOnly":false,
+    "orderType":"Limit",
+    "origSz":"20.0",
+    "tif":"Alo",
+    "cloid":"0x020b915311ca20c00000000000000000"
   }
 }
 
 // Удаление ордера
 {
-  "user": "0xc64cc00b46101bd40aa1c3121195e85c0b0918d8",
-  "oid": 35061057543,
-  "side": "Ask",
-  "px": "115200.2",
-  "coin": "HYPE",
-  "raw_book_diff": "remove"
+  "time":"2025-09-02T08:26:36.877863946",
+  "user":"0x621c5551678189b9a6c94d929924c225ff1d63ab",
+  "hash":null,
+  "builder":null,
+  "status":"canceled",
+  "order":{
+    "coin":"HYPE",
+    "side":"B",
+    "limitPx":"44.663",
+    "sz":"223.03",
+    "oid":150926043935,
+    "timestamp":1756801593564,
+    "triggerCondition":"N/A",
+    "isTrigger":false,
+    "triggerPx":"0.0",
+    "children":[],
+    "isPositionTpsl":false,
+    "reduceOnly":false,
+    "orderType":"Limit",
+    "origSz":"223.03",
+    "tif":"Alo",
+    "cloid":"0x00000000000002820096147980101592"
+  }
 }
 ```
 
@@ -455,7 +475,7 @@ services:
       - ./data:/app/data
       - ~/hl/data:/hl/data:ro
     environment:
-      - NODE_LOGS_PATH=/hl/data/node_raw_book_diffs/hourly
+      - NODE_LOGS_PATH=/hl/data/node_order_statuses/hourly
     restart: unless-stopped
 ```
 
@@ -519,7 +539,7 @@ WantedBy=multi-user.target
 
 **Пример .env:**
 ```env
-NODE_LOGS_PATH=~/hl/data/node_raw_book_diffs/hourly
+NODE_LOGS_PATH=~/hl/data/node_order_statuses/hourly
 CLEANUP_INTERVAL_HOURS=2
 SCAN_INTERVAL_SECONDS=30
 API_HOST=0.0.0.0

@@ -128,8 +128,8 @@ class TestFileWatcher:
     async def test_process_file_async_with_valid_data(self):
         """Test processing file with valid order data."""
         test_file = self.temp_dir / "test.json"
-        test_content = '''{"user":"0x123","oid":123,"coin":"BTC","side":"Bid","px":"50000","raw_book_diff":{"new":{"sz":"1.0"}}}
-{"user":"0x456","oid":456,"coin":"ETH","side":"Ask","px":"3000","raw_book_diff":{"new":{"sz":"10.0"}}}'''
+        test_content = f'''{"user":"0x123","status":"open","order":{"oid":123,"coin":"BTC","side":"Bid","px":"50000"}}
+{"user":"0x456","status":"cancelled","order":{"oid":456,"coin":"ETH","side":"Ask","px":"3000"}}'''
         test_file.write_text(test_content)
         
         with patch.object(self.file_watcher.order_manager, 'update_order') as mock_update:

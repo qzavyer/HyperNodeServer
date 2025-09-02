@@ -29,7 +29,7 @@ class TestLogParser:
     
     def test_parse_new_order(self):
         """Test parsing new order."""
-        json_line = '{"user":"0x123","oid":123,"coin":"BTC","side":"Bid","px":"50000","raw_book_diff":{"new":{"sz":"1.5"}}}'
+        json_line = '{"user":"0x123","status":"open","order":{"oid":123,"coin":"BTC","side":"Bid","px":"50000"}}'
         result = self.parser._parse_line(json_line)
         
         assert result is not None
@@ -42,7 +42,7 @@ class TestLogParser:
     
     def test_parse_update_order(self):
         """Test parsing updated order."""
-        json_line = '{"user":"0x456","oid":456,"coin":"ETH","side":"Ask","px":"3000","raw_book_diff":{"update":{"origSz":"2.0","newSz":"1.8"}}}'
+        json_line = '{"user":"0x456","status":"open","order":{"oid":456,"coin":"ETH","side":"Ask","px":"3000"}}'
         result = self.parser._parse_line(json_line)
         
         assert result is not None
@@ -54,7 +54,7 @@ class TestLogParser:
     
     def test_parse_remove_order(self):
         """Test parsing removed order."""
-        json_line = '{"user":"0x789","oid":789,"coin":"BTC","side":"Bid","px":"49000","raw_book_diff":"remove"}'
+        json_line = '{"user":"0x789","status":"cancelled","order":{"oid":789,"coin":"BTC","side":"Bid","px":"49000"}}'
         result = self.parser._parse_line(json_line)
         
         assert result is not None
@@ -68,9 +68,9 @@ class TestLogParser:
         """Test parsing file with multiple orders."""
         # Create temporary file with test data
         test_data = [
-            '{"user":"0x123","oid":123,"coin":"BTC","side":"Bid","px":"50000","raw_book_diff":{"new":{"sz":"1.5"}}}',
-            '{"user":"0x456","oid":456,"coin":"ETH","side":"Ask","px":"3000","raw_book_diff":{"new":{"sz":"2.0"}}}',
-            '{"user":"0x789","oid":789,"coin":"BTC","side":"Bid","px":"49000","raw_book_diff":"remove"}'
+            '{"user":"0x123", "status":"open","order":{"oid":123,"coin":"BTC","side":"Bid","px":"50000"}}',
+            '{"user":"0x456","status":"open","order":{"oid":456,"coin":"ETH","side":"Ask","px":"3000"}}',
+            '{"user":"0x789","status":"open","order":{"oid":789,"coin":"BTC","side":"Bid","px":"49000"}}'
         ]
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -127,25 +127,3 @@ class TestOrderExtractor:
             # Missing required fields
         }
         assert self.extractor._validate_order_data(data) is False
-    
-    def test_get_operation_type_new(self):
-        """Test operation type detection for new order."""
-        data = {"raw_book_diff": {"new": {"sz": "1.5"}}}
-        assert self.extractor._get_operation_type(data) == "new"
-    
-    def test_get_operation_type_update(self):
-        """Test operation type detection for update."""
-        data = {"raw_book_diff": {"update": {"origSz": "2.0", "newSz": "1.8"}}}
-        assert self.extractor._get_operation_type(data) == "update"
-    
-    def test_get_operation_type_remove(self):
-        """Test operation type detection for remove."""
-        data = {"raw_book_diff": "remove"}
-        assert self.extractor._get_operation_type(data) == "remove"
-    
-    def test_get_operation_type_unknown(self):
-        """Test operation type detection for unknown type."""
-        data = {"raw_book_diff": {"unknown": "data"}}
-        assert self.extractor._get_operation_type(data) == "unknown"
-    
-

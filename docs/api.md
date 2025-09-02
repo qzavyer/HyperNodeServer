@@ -153,7 +153,7 @@ curl "http://localhost:8000/api/v1/config"
 **Response:**
 ```json
 {
-  "node_logs_path": "~/hl/data/node_raw_book_diffs/hourly",
+  "node_logs_path": "~/hl/data/node_order_statuses/hourly",
   "cleanup_interval_hours": 2,
   "api_host": "0.0.0.0",
   "api_port": 8000,
@@ -200,7 +200,7 @@ curl -X PUT "http://localhost:8000/api/v1/config" \
 **Response:**
 ```json
 {
-  "node_logs_path": "~/hl/data/node_raw_book_diffs/hourly",
+  "node_logs_path": "~/hl/data/node_order_statuses/hourly",
   "cleanup_interval_hours": 2,
   "api_host": "0.0.0.0",
   "api_port": 9000,
