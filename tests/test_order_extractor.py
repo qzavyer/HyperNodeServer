@@ -152,6 +152,35 @@ class TestOrderExtractor:
         
         # Assert
         assert result is None
-
-
-
+    
+    def test_extract_order_rejected_statuses_return_none(self):
+        """Тест что отклоненные статусы возвращают None."""
+        rejected_statuses = [
+            "badAloPxRejected",
+            "perpMarginRejected", 
+            "iocCancelRejected",
+            "insufficientSpotBalanceRejected",
+            "reduceOnlyCanceled",
+            "minTradeNtlRejected"
+        ]
+        
+        for status in rejected_statuses:
+            # Arrange
+            log_entry = {
+                "time": "2025-09-02T08:26:36.877863946",
+                "user": "0x123",
+                "status": status,
+                "order": {
+                    "coin": "BTC",
+                    "side": "B",
+                    "limitPx": "50000",
+                    "sz": "1.0",
+                    "oid": 123
+                }
+            }
+            
+            # Act
+            result = self.extractor.extract_order(log_entry)
+            
+            # Assert
+            assert result is None, f"Статус {status} должен возвращать None"
