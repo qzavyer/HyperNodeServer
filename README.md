@@ -143,6 +143,46 @@ tail -f logs/app_*.log
 - `GET /performance` - информация о производительности
 - `GET /docs` - Swagger документация
 
+### WebSocket Endpoints
+
+#### Real-time уведомления
+
+- `ws://localhost:8000/ws/orderUpdate` - мгновенные уведомления об изменениях ордеров
+- `ws://localhost:8000/ws/orderBatch` - батчевые уведомления каждые 500ms
+- `GET /ws/status` - статус WebSocket соединений
+
+#### Формат сообщений
+
+**Мгновенные уведомления:**
+```json
+{
+  "type": "orderUpdate",
+  "channel": "orderUpdate",
+  "timestamp": "2024-01-01T12:00:00",
+  "data": {
+    "id": "123",
+    "symbol": "BTC",
+    "side": "buy",
+    "price": 50000.0,
+    "size": 1.0,
+    "status": "open"
+  }
+}
+```
+
+**Батчевые уведомления:**
+```json
+{
+  "type": "orderBatch",
+  "channel": "orderBatch",
+  "timestamp": "2024-01-01T12:00:00",
+  "data": {
+    "orders": [...],
+    "count": 5
+  }
+}
+```
+
 ### Примеры запросов
 
 ```bash

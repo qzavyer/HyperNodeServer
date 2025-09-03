@@ -9,10 +9,13 @@ from starlette.responses import Response
 import time
 
 from src.api.routes import router
+from src.api.websocket_routes import router as websocket_router, set_websocket_manager
 from src.storage.file_storage import FileStorage
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.watcher.file_watcher import FileWatcher
+from src.websocket.websocket_manager import WebSocketManager
+from src.notifications.order_notifier import OrderNotifier
 from src.utils.logger import setup_logger
 from config.settings import settings
 
@@ -98,12 +101,18 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router, prefix="/api/v1")
+app.include_router(websocket_router, prefix="/ws")
 
 # Global instances
 file_storage = FileStorage()
 config_manager = ConfigManager()
-order_manager = OrderManager(file_storage, config_manager)
+websocket_manager = WebSocketManager()
+order_notifier = OrderNotifier(websocket_manager, config_manager)
+order_manager = OrderManager(file_storage, config_manager, order_notifier)
 file_watcher = FileWatcher(order_manager)
+
+# Set WebSocket manager in routes
+set_websocket_manager(websocket_manager)
 
 @app.on_event("startup")
 async def startup_event():
@@ -112,6 +121,10 @@ async def startup_event():
         # Initialize config manager
         await config_manager.load_config_async()
         logger.info("✅ Configuration loaded successfully")
+        
+        # Start WebSocket manager
+        await websocket_manager.start()
+        logger.info("✅ WebSocket manager started successfully")
         
         # Initialize order manager
         await order_manager.initialize()
@@ -131,6 +144,9 @@ async def shutdown_event():
     try:
         # Stop file watcher
         await file_watcher.stop_async()
+        
+        # Stop WebSocket manager
+        await websocket_manager.stop()
         
         # Cleanup old orders
         cleaned_count = await order_manager.cleanup_old_orders(settings.CLEANUP_INTERVAL_HOURS)
@@ -165,6 +181,8 @@ async def performance_info():
     return {
         "file_watcher_running": file_watcher.is_running,
         "background_processing": file_watcher.get_processing_status(),
+        "websocket_status": websocket_manager.get_connection_stats(),
+        "notifications": order_notifier.get_notification_stats(),
         "memory_usage": {
             "orders_in_memory": order_manager.get_order_count(),
             "estimated_memory_mb": order_manager.get_order_count() * 0.001  # Rough estimate

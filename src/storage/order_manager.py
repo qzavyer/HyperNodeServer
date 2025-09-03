@@ -9,6 +9,7 @@ from src.utils.logger import get_logger
 
 if TYPE_CHECKING:
     from src.storage.config_manager import ConfigManager
+    from src.notifications.order_notifier import OrderNotifier
 
 logger = get_logger(__name__)
 
@@ -19,19 +20,26 @@ class OrderManagerError(Exception):
 class OrderManager:
     """Manage order state and status transitions."""
     
-    def __init__(self, storage: FileStorage, config_manager: Optional['ConfigManager'] = None):
+    def __init__(self, storage: FileStorage, config_manager: Optional['ConfigManager'] = None, order_notifier: Optional['OrderNotifier'] = None):
         """Initialize order manager.
         
         Args:
             storage: File storage instance
             config_manager: Configuration manager for filtering rules
+            order_notifier: Order notifier for WebSocket updates
         """
         self.storage = storage
         self.config_manager = config_manager
+        self.order_notifier = order_notifier
         self.orders: Dict[str, Order] = {}
         self.logger = get_logger(__name__)
         self._save_pending = False
         self._save_task: Optional[asyncio.Task] = None
+    
+    def set_order_notifier(self, order_notifier: 'OrderNotifier'):
+        """Set order notifier for WebSocket updates."""
+        self.order_notifier = order_notifier
+        self.logger.info("Order notifier set for WebSocket updates")
     
     async def initialize(self) -> None:
         """Initialize order manager by loading existing orders."""
@@ -96,6 +104,7 @@ class OrderManager:
                 return
             
             order_id = order.id
+            order_updated = False
             
             if order_id in self.orders:
                 existing = self.orders[order_id]
@@ -103,11 +112,22 @@ class OrderManager:
                 new_status = self._apply_status_transition(existing.status, order.status)
                 order.status = new_status
                 
+                # Check if order actually changed
+                if (existing.status != order.status or 
+                    existing.price != order.price or 
+                    existing.size != order.size):
+                    order_updated = True
+                
                 self.logger.debug(f"Updated order {order_id}: {existing.status} -> {order.status}")
             else:
+                order_updated = True
                 self.logger.debug(f"Added new order {order_id} with status {order.status}")
             
             self.orders[order_id] = order
+            
+            # Send WebSocket notification if order was updated and notifier is available
+            if order_updated and self.order_notifier:
+                await self.order_notifier.notify_order_update(order, notification_type="both")
             
             # Schedule async save instead of immediate save
             await self._schedule_save_async()
@@ -125,6 +145,7 @@ class OrderManager:
         - Applies transition rules from current status to resolved status
         - Filters orders based on configuration rules
         - Uses batched saving for better performance
+        - Sends WebSocket notifications for relevant orders
 
         Args:
             orders: Orders to apply in one batch
@@ -141,6 +162,7 @@ class OrderManager:
             for order in filtered_orders:
                 grouped.setdefault(order.id, []).append(order)
 
+            updated_orders = []
             for order_id, updates in grouped.items():
                 statuses: Set[str] = {o.status for o in updates}
 
@@ -153,8 +175,15 @@ class OrderManager:
                 if order_id in self.orders:
                     current = self.orders[order_id]
                     final_status = self._apply_status_transition(current.status, resolved_status)
+                    
+                    # Check if order actually changed
+                    if (current.status != final_status or 
+                        current.price != latest.price or 
+                        current.size != latest.size):
+                        updated_orders.append(order_id)
                 else:
                     final_status = resolved_status
+                    updated_orders.append(order_id)
 
                 updated = Order(
                     id=order_id,
@@ -168,6 +197,11 @@ class OrderManager:
                 )
 
                 self.orders[order_id] = updated
+
+            # Send WebSocket notifications for updated orders if notifier is available
+            if updated_orders and self.order_notifier:
+                relevant_orders = [self.orders[order_id] for order_id in updated_orders]
+                await self.order_notifier.notify_orders_batch(relevant_orders, notification_type="both")
 
             # Schedule async save for the entire batch
             await self._schedule_save_async()
