@@ -307,6 +307,10 @@ class OrderManager:
             counts[status] = counts.get(status, 0) + 1
         return counts
     
+    def get_open_orders(self) -> List[Order]:
+        """Get all open orders."""
+        return [order for order in self.orders.values() if order.status == "open"]
+    
     def get_orders(self, limit: Optional[int] = None) -> List[Order]:
         """Get list of orders with optional limit."""
         orders = list(self.orders.values())
@@ -373,21 +377,21 @@ class OrderManager:
         """Get order book for a symbol with specified depth."""
         symbol_orders = [order for order in self.orders.values() if order.symbol == symbol and order.status == "open"]
         
-        # Separate buy and sell orders
-        buy_orders = [order for order in symbol_orders if order.side == "buy"]
-        sell_orders = [order for order in symbol_orders if order.side == "sell"]
+        # Separate bid and ask orders
+        bid_orders = [order for order in symbol_orders if order.side == "Bid"]
+        ask_orders = [order for order in symbol_orders if order.side == "Ask"]
         
-        # Sort by price (buy: descending, sell: ascending)
-        buy_orders.sort(key=lambda x: x.price, reverse=True)
-        sell_orders.sort(key=lambda x: x.price)
+        # Sort by price (bid: descending, ask: ascending)
+        bid_orders.sort(key=lambda x: x.price, reverse=True)
+        ask_orders.sort(key=lambda x: x.price)
         
         # Limit depth
-        buy_orders = buy_orders[:depth]
-        sell_orders = sell_orders[:depth]
+        bid_orders = bid_orders[:depth]
+        ask_orders = ask_orders[:depth]
         
         return {
-            "buy": buy_orders,
-            "sell": sell_orders
+            "bid": bid_orders,
+            "ask": ask_orders
         }
     
     def get_market_summary(self, symbol: str) -> Dict[str, any]:

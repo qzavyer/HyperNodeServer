@@ -6,7 +6,7 @@ import shutil
 import json
 import asyncio
 from pathlib import Path
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, Mock
 from datetime import datetime, timedelta
 
 from src.storage.file_storage import FileStorage
@@ -14,7 +14,47 @@ from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.parser.log_parser import LogParser
 from src.parser.order_extractor import OrderExtractor
-from src.storage.models import Order, Config
+from src.watcher.file_watcher import FileWatcher
+from src.storage.models import Order, Config, SymbolConfig
+
+@pytest.fixture
+def temp_dir():
+    """Create temporary directory for testing."""
+    temp_dir = Path(tempfile.mkdtemp())
+    yield temp_dir
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+@pytest.fixture
+def sample_config(temp_dir):
+    """Create sample configuration."""
+    config = Config(
+        node_logs_path=str(temp_dir / "logs"),
+        cleanup_interval_hours=2,
+        api_host="0.0.0.0",
+        api_port=8000,
+        log_level="DEBUG",
+        log_file_path="logs/app.log",
+        log_max_size_mb=100,
+        log_retention_days=30,
+        data_dir="data",
+        config_file_path="config/config.json",
+        max_orders_per_request=1000,
+        file_read_retry_attempts=3,
+        file_read_retry_delay=1.0,
+        symbols_config=[
+            SymbolConfig(symbol="BTC", min_liquidity=1000.0, price_deviation=0.01),
+            SymbolConfig(symbol="ETH", min_liquidity=500.0, price_deviation=0.01)
+        ]
+    )
+    return config
+
+@pytest.fixture
+def mock_order_notifier():
+    """Mock order notifier."""
+    notifier = Mock()
+    notifier.notify_order_update = AsyncMock()
+    notifier.notify_orders_batch = AsyncMock()
+    return notifier
 
 class TestIntegration:
     """Integration tests for complete workflow."""
@@ -61,7 +101,7 @@ class TestIntegration:
         
         order_manager = OrderManager(file_storage, config_manager)
         
-        # 2. Load configuration
+        # 2. Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = str(self.logs_dir)
             mock_settings.CLEANUP_INTERVAL_HOURS = 2
@@ -130,12 +170,12 @@ class TestIntegration:
         assert btc_bid_order.status == "open"
         
         # 8. Test filtering
-        filtered_orders = order_manager.get_orders(symbol="BTC", side="Bid")
+        filtered_orders = order_manager.get_orders_by_symbol("BTC")
         assert len(filtered_orders) == 2
         
         # 9. Test order retrieval by ID
         order_id = "123"
-        retrieved_order = order_manager.get_order_by_id(order_id)
+        retrieved_order = order_manager.orders.get(order_id)
         assert retrieved_order is not None
         assert retrieved_order.symbol == "BTC"
         assert retrieved_order.price == 50000.0
@@ -204,7 +244,7 @@ class TestIntegration:
         assert order.status == "open"
         
         # Verify order was added
-        retrieved_order = order_manager.get_order_by_id("test_order_1")
+        retrieved_order = order_manager.orders.get("test_order_1")
         assert retrieved_order is not None
         assert retrieved_order.status == "open"
         
@@ -222,7 +262,7 @@ class TestIntegration:
         await order_manager.update_order(filled_order)
         
         # Verify status was updated
-        updated_order = order_manager.get_order_by_id("test_order_1")
+        updated_order = order_manager.orders.get("test_order_1")
         assert updated_order is not None
         print(f"DEBUG: Order status after update: {updated_order.status}")
         print(f"DEBUG: Order manager orders: {list(order_manager.orders.keys())}")
@@ -241,7 +281,7 @@ class TestIntegration:
             status="canceled"
         )
         await order_manager.update_order(cancelled_order)
-        assert order_manager.get_order_by_id("test_order_1").status == "filled"  # Should remain filled
+        assert order_manager.orders.get("test_order_1").status == "filled"  # Should remain filled
         
         # Create new order and cancel it
         order2 = Order(
@@ -267,7 +307,7 @@ class TestIntegration:
             status="canceled"
         )
         await order_manager.update_order(cancelled_order2)
-        assert order_manager.get_order_by_id("test_order_2").status == "canceled"
+        assert order_manager.orders.get("test_order_2").status == "canceled"
     
     @pytest.mark.asyncio
     async def test_configuration_persistence(self):
@@ -401,11 +441,11 @@ class TestIntegration:
         
         # Add first order
         await order_manager.update_order(order1)
-        assert order_manager.get_order_by_id("duplicate_order") is not None
+        assert order_manager.orders.get("duplicate_order") is not None
         
         # Add duplicate order (should update existing)
         await order_manager.update_order(order2)
-        updated_order = order_manager.get_order_by_id("duplicate_order")
+        updated_order = order_manager.orders.get("duplicate_order")
         assert updated_order.price == 51000.0  # Should be updated
         assert updated_order.size == 2.0  # Should be updated
     
@@ -477,10 +517,10 @@ class TestIntegration:
                 await order_manager.update_order(order)
         
         # Test filtering performance
-        btc_orders = order_manager.get_orders(symbol="BTC")
+        btc_orders = order_manager.get_orders_by_symbol("BTC")
         assert len(btc_orders) == 500
         
-        bid_orders = order_manager.get_orders(side="Bid")
+        bid_orders = [o for o in order_manager.orders.values() if o.side == "Bid"]
         assert len(bid_orders) == 334  # Every 3rd order
         
         # Test statistics performance
@@ -492,7 +532,7 @@ class TestIntegration:
         
         # Test order retrieval performance
         test_order_id = "order_500"
-        retrieved_order = order_manager.get_order_by_id(test_order_id)
+        retrieved_order = order_manager.orders.get(test_order_id)
         assert retrieved_order is not None
         assert retrieved_order.symbol == "BTC"  # 500 is even, so BTC
         assert retrieved_order.side == "Ask"  # 500 % 3 = 2, so Ask

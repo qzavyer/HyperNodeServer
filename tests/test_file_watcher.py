@@ -1,245 +1,228 @@
-"""Tests for FileWatcher module."""
+"""Tests for file watcher module."""
 
 import pytest
 import asyncio
-import tempfile
-import os
-import time
-from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
-from datetime import datetime, timedelta
-
+from pathlib import Path
 from src.watcher.file_watcher import FileWatcher, LogFileHandler
 from src.storage.order_manager import OrderManager
-from src.storage.file_storage import FileStorage
-from src.storage.models import Order
+from src.parser.log_parser import LogParser
 
+@pytest.fixture
+def mock_order_manager():
+    """Mock order manager."""
+    manager = Mock(spec=OrderManager)
+    manager.update_orders_batch_async = AsyncMock()
+    return manager
+
+@pytest.fixture
+def mock_parser():
+    """Mock log parser."""
+    parser = Mock(spec=LogParser)
+    parser.parse_file_async = AsyncMock()
+    return parser
+
+@pytest.fixture
+def file_watcher(mock_order_manager):
+    """File watcher instance for testing."""
+    watcher = FileWatcher(mock_order_manager)
+    watcher.parser = Mock(spec=LogParser)
+    watcher.parser.parse_file_async = AsyncMock()
+    return watcher
 
 class TestFileWatcher:
     """Tests for FileWatcher class."""
     
-    def setup_method(self):
-        """Setup before each test."""
-        self.temp_dir = Path(tempfile.mkdtemp())
-        self.storage = FileStorage()
-        self.order_manager = OrderManager(self.storage)
-        self.file_watcher = FileWatcher(self.order_manager)
-        self.file_watcher.logs_path = self.temp_dir
-    
-    def teardown_method(self):
-        """Cleanup after each test."""
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    def test_init(self, mock_order_manager):
+        """Test FileWatcher initialization."""
+        watcher = FileWatcher(mock_order_manager)
+        assert watcher.order_manager == mock_order_manager
+        assert watcher.is_running is False
+        assert len(watcher.processing_files) == 0
+        assert watcher.pending_files is not None
     
     @pytest.mark.asyncio
-    async def test_start_async_creates_directory(self):
-        """Test that start_async creates logs directory."""
-        logs_path = self.temp_dir / "logs"
-        self.file_watcher.logs_path = logs_path
-        
-        with patch.object(self.file_watcher, 'scan_latest_file_async') as mock_scan, \
-             patch.object(self.file_watcher, '_cleanup_loop_async') as mock_cleanup, \
-             patch.object(self.file_watcher.observer, 'schedule'), \
-             patch.object(self.file_watcher.observer, 'start'):
+    async def test_start_async(self, file_watcher):
+        """Test starting file watcher."""
+        # Mock the internal async tasks
+        with patch.object(file_watcher, 'scan_latest_file_async') as mock_scan, \
+             patch.object(file_watcher, '_background_file_processor') as mock_bg, \
+             patch.object(file_watcher, '_cleanup_loop_async') as mock_cleanup, \
+             patch('asyncio.create_task') as mock_create_task:
             
-            await self.file_watcher.start_async()
+            # Mock the observer methods
+            file_watcher.observer.schedule = Mock()
+            file_watcher.observer.start = Mock()
             
-            assert logs_path.exists()
-            assert logs_path.is_dir()
+            await file_watcher.start_async()
+            
+            assert file_watcher.is_running is True
+            file_watcher.observer.schedule.assert_called_once_with(file_watcher.handler, str(file_watcher.logs_path), recursive=True)
+            file_watcher.observer.start.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_stop_async_stops_observer(self):
-        """Test that stop_async properly stops the observer."""
-        self.file_watcher.is_running = True
+    async def test_stop_async(self, file_watcher):
+        """Test stopping file watcher."""
+        file_watcher.is_running = True
+        file_watcher.observer.stop = Mock()
+        file_watcher.observer.join = Mock()
         
-        with patch.object(self.file_watcher.observer, 'stop') as mock_stop, \
-             patch.object(self.file_watcher.observer, 'join') as mock_join:
-            
-            await self.file_watcher.stop_async()
-            
-            mock_stop.assert_called_once()
-            mock_join.assert_called_once()
-            assert not self.file_watcher.is_running
-    
-    def test_find_latest_file_returns_none_when_no_files(self):
-        """Test that _find_latest_file returns None when no files exist."""
-        result = self.file_watcher._find_latest_file()
-        assert result is None
-    
-    def test_find_latest_file_returns_latest_file(self):
-        """Test that _find_latest_file returns the most recent file."""
-        # Create test files with different timestamps
-        file1 = self.temp_dir / "file1.json"
-        file2 = self.temp_dir / "file2.json"
+        await file_watcher.stop_async()
         
-        file1.touch()
-        time.sleep(0.1)  # Ensure different timestamps
-        file2.touch()
-        
-        result = self.file_watcher._find_latest_file()
-        assert result == file2
+        assert file_watcher.is_running is False
+        file_watcher.observer.stop.assert_called_once()
+        file_watcher.observer.join.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_read_file_with_retry_async_success_on_first_attempt(self):
-        """Test successful file reading on first attempt."""
-        test_file = self.temp_dir / "test.json"
-        test_content = '{"test": "data"}\n'
-        test_file.write_text(test_content)
+    async def test_schedule_file_processing(self, file_watcher):
+        """Test scheduling file for processing."""
+        file_path = Path("/test/file.log")
         
-        result = await self.file_watcher._read_file_with_retry_async(test_file)
-        
-        assert result == [test_content]
+        # Mock file size and settings
+        with patch('pathlib.Path.stat') as mock_stat, \
+             patch('src.watcher.file_watcher.settings') as mock_settings:
+            mock_stat.return_value.st_size = 1024 * 1024  # 1MB
+            mock_settings.MAX_FILE_SIZE_GB = 10.0  # Allow files up to 10GB
+            
+            await file_watcher._schedule_file_processing(file_path)
+            
+            # Verify file was scheduled
+            assert file_watcher.pending_files.qsize() == 1
     
     @pytest.mark.asyncio
-    async def test_read_file_with_retry_async_success_on_second_attempt(self):
-        """Test successful file reading on second attempt."""
-        test_file = self.temp_dir / "test.json"
-        test_content = '{"test": "data"}\n'
-        test_file.write_text(test_content)
+    async def test_process_file_background(self, file_watcher):
+        """Test background file processing."""
+        file_path = Path("/test/file.log")
         
-        # Mock aiofiles.open to fail first time, succeed second time
-        mock_file = AsyncMock()
-        mock_file.readlines.return_value = [test_content]
+        # Mock parser to return batches
+        mock_batch = [Mock(spec='Order')]
         
-        with patch('aiofiles.open') as mock_open:
-            mock_open.side_effect = [
-                OSError("File busy"),  # First attempt fails
-                type('MockContextManager', (), {
-                    '__aenter__': AsyncMock(return_value=mock_file),
-                    '__aexit__': AsyncMock(return_value=None)
-                })()  # Second attempt succeeds
-            ]
+        # Create proper async generator mock that matches AsyncGenerator[List[Order], None]
+        class MockAsyncGenerator:
+            def __init__(self, data):
+                self.data = data
+                self.index = 0
             
-            result = await self.file_watcher._read_file_with_retry_async(test_file)
+            def __aiter__(self):
+                return self
             
-            assert result == [test_content]
-            assert mock_open.call_count == 2
+            async def __anext__(self):
+                if self.index < len(self.data):
+                    result = self.data[self.index]
+                    self.index += 1
+                    return result
+                raise StopAsyncIteration
+        
+        # Mock parse_file_async to return our async generator
+        file_watcher.parser.parse_file_async = Mock(return_value=MockAsyncGenerator([mock_batch]))
+        
+        # Mock order manager
+        file_watcher.order_manager.update_orders_batch_async = AsyncMock()
+        
+        # Create a task to run the background processing
+        # This allows us to check the state during processing
+        task = asyncio.create_task(file_watcher._process_file_background(file_path))
+        
+        # Wait a bit for the processing to start
+        await asyncio.sleep(0.01)
+        
+        # Verify file was added to processing_files during processing
+        assert file_path in file_watcher.processing_files
+        
+        # Wait for the task to complete
+        await task
+        
+        # Verify file was removed from processing_files after completion
+        assert file_path not in file_watcher.processing_files
+        
+        # Verify parser was called
+        file_watcher.parser.parse_file_async.assert_called_once_with(str(file_path))
+        
+        # Verify order manager was updated
+        file_watcher.order_manager.update_orders_batch_async.assert_called_once_with(mock_batch)
     
-    @pytest.mark.asyncio
-    async def test_read_file_with_retry_async_fails_after_max_attempts(self):
-        """Test that file reading fails after maximum attempts."""
-        test_file = self.temp_dir / "test.json"
+    def test_get_processing_status(self, file_watcher):
+        """Test getting processing status."""
+        file_watcher.is_running = True
+        file_watcher.processing_files.add(Path("/test/file1.log"))
+        file_watcher.processing_files.add(Path("/test/file2.log"))
         
-        with patch('aiofiles.open', side_effect=OSError("File busy")), \
-             pytest.raises(OSError, match="File busy"):
-            
-            await self.file_watcher._read_file_with_retry_async(test_file)
-    
-    @pytest.mark.asyncio
-    async def test_process_file_async_with_valid_data(self):
-        """Test processing file with valid order data."""
-        test_file = self.temp_dir / "test.json"
-        test_content = f'''{{"time":"2025-09-02T08:26:36.877863946","user":"0x123","status":"open","order":{{"coin":"BTC","side":"B","limitPx":"50000","sz":"1.0","oid":123}}}}
-{{"time":"2025-09-02T08:26:36.877863946","user":"0x456","status":"canceled","order":{{"coin":"ETH","side":"A","limitPx":"3000","sz":"10.0","oid":456}}}}'''
-        test_file.write_text(test_content)
+        # Mock queue size
+        file_watcher.pending_files.qsize = Mock(return_value=3)
         
-        with patch.object(self.file_watcher.order_manager, 'update_order') as mock_update:
-            await self.file_watcher._process_file_async(test_file)
-            
-            # Should call update_order for each order found
-            assert mock_update.call_count == 2
-    
-    @pytest.mark.asyncio
-    async def test_process_file_async_with_no_data(self):
-        """Test processing file with no valid order data."""
-        test_file = self.temp_dir / "test.json"
-        test_content = '{"invalid": "data"}\n'
-        test_file.write_text(test_content)
+        status = file_watcher.get_processing_status()
         
-        with patch.object(self.file_watcher.order_manager, 'update_order') as mock_update:
-            await self.file_watcher._process_file_async(test_file)
-            
-            # Should not call update_order if no orders found
-            mock_update.assert_not_called()
-    
-    @pytest.mark.asyncio
-    async def test_cleanup_old_data_async_calls_order_manager(self):
-        """Test that cleanup calls order manager cleanup method."""
-        with patch.object(self.file_watcher.order_manager, 'cleanup_old_orders') as mock_cleanup:
-            mock_cleanup.return_value = 5
-            
-            await self.file_watcher.cleanup_old_data_async()
-            
-            mock_cleanup.assert_called_once_with(2)  # Default CLEANUP_INTERVAL_HOURS
-    
-    @pytest.mark.asyncio
-    async def test_cleanup_loop_async_runs_periodically(self):
-        """Test that cleanup loop runs periodically."""
-        self.file_watcher.is_running = True
-        
-        with patch.object(self.file_watcher, 'cleanup_old_data_async') as mock_cleanup, \
-             patch('asyncio.sleep') as mock_sleep:
-            
-            # Run cleanup loop for a short time
-            task = asyncio.create_task(self.file_watcher._cleanup_loop_async())
-            await asyncio.sleep(0.1)  # Let it run briefly
-            self.file_watcher.is_running = False
-            await task
-            
-            mock_sleep.assert_called()
-            # Note: cleanup might not be called due to timing, so we don't assert it
-
+        assert status["is_running"] is True
+        assert status["processing_files_count"] == 2
+        assert status["pending_files_count"] == 3
+        assert len(status["processing_files"]) == 2
 
 class TestLogFileHandler:
     """Tests for LogFileHandler class."""
     
-    def setup_method(self):
-        """Setup before each test."""
-        self.file_watcher = Mock()
-        self.handler = LogFileHandler(self.file_watcher)
+    def test_init(self, mock_order_manager):
+        """Test LogFileHandler initialization."""
+        file_watcher = FileWatcher(mock_order_manager)
+        handler = LogFileHandler(file_watcher)
+        assert handler.file_watcher == file_watcher
     
-    def test_on_modified_with_json_file(self):
-        """Test that on_modified processes JSON files."""
-        event = Mock()
-        event.is_directory = False
-        event.src_path = "/path/to/file.json"
+    @pytest.mark.asyncio
+    async def test_on_created(self, mock_order_manager):
+        """Test file creation event handling."""
+        file_watcher = FileWatcher(mock_order_manager)
+        file_watcher._schedule_file_processing = AsyncMock()
+        handler = LogFileHandler(file_watcher)
         
+        mock_event = Mock()
+        mock_event.is_directory = False
+        mock_event.src_path = "/test/file.json"
+        
+        # Mock asyncio.create_task
         with patch('asyncio.create_task') as mock_create_task:
-            self.handler.on_modified(event)
-            
+            handler.on_created(mock_event)
             mock_create_task.assert_called_once()
     
-    def test_on_modified_with_non_json_file(self):
-        """Test that on_modified ignores non-JSON files."""
-        event = Mock()
-        event.is_directory = False
-        event.src_path = "/path/to/file.txt"
+    @pytest.mark.asyncio
+    async def test_on_modified(self, mock_order_manager):
+        """Test file modification event handling."""
+        file_watcher = FileWatcher(mock_order_manager)
+        file_watcher._schedule_file_processing = AsyncMock()
+        handler = LogFileHandler(file_watcher)
         
-        with patch('asyncio.create_task') as mock_create_task:
-            self.handler.on_modified(event)
-            
-            mock_create_task.assert_not_called()
-    
-    def test_on_modified_with_directory(self):
-        """Test that on_modified ignores directories."""
-        event = Mock()
-        event.is_directory = True
-        event.src_path = "/path/to/directory"
+        mock_event = Mock()
+        mock_event.is_directory = False
+        mock_event.src_path = "/test/file.json"
         
+        # Mock asyncio.create_task
         with patch('asyncio.create_task') as mock_create_task:
-            self.handler.on_modified(event)
-            
-            mock_create_task.assert_not_called()
-    
-    def test_on_created_with_json_file(self):
-        """Test that on_created processes JSON files."""
-        event = Mock()
-        event.is_directory = False
-        event.src_path = "/path/to/file.json"
-        
-        with patch('asyncio.create_task') as mock_create_task:
-            self.handler.on_created(event)
-            
+            handler.on_modified(mock_event)
             mock_create_task.assert_called_once()
     
-    def test_on_created_with_non_json_file(self):
-        """Test that on_created ignores non-JSON files."""
-        event = Mock()
-        event.is_directory = False
-        event.src_path = "/path/to/file.txt"
+    def test_on_created_ignores_directories(self, mock_order_manager):
+        """Test that directory events are ignored."""
+        file_watcher = FileWatcher(mock_order_manager)
+        file_watcher._schedule_file_processing = AsyncMock()
+        handler = LogFileHandler(file_watcher)
+        
+        mock_event = Mock()
+        mock_event.is_directory = True
+        mock_event.src_path = "/test/directory"
         
         with patch('asyncio.create_task') as mock_create_task:
-            self.handler.on_created(event)
-            
+            handler.on_created(mock_event)
+            mock_create_task.assert_not_called()
+    
+    def test_on_modified_ignores_non_json_files(self, mock_order_manager):
+        """Test that non-JSON files are ignored."""
+        file_watcher = FileWatcher(mock_order_manager)
+        file_watcher._schedule_file_processing = AsyncMock()
+        handler = LogFileHandler(file_watcher)
+        
+        mock_event = Mock()
+        mock_event.is_directory = False
+        mock_event.src_path = "/test/file.txt"
+        
+        with patch('asyncio.create_task') as mock_create_task:
+            handler.on_modified(mock_event)
             mock_create_task.assert_not_called()
 
