@@ -49,12 +49,22 @@ async def get_orders_async(
         List of filtered orders
     """
     try:
-        orders = manager.get_orders(
-            symbol=symbol,
-            side=side,
-            min_liquidity=min_liquidity,
-            status=status
-        )
+        # Start with all orders
+        orders = list(manager.orders.values())
+        
+        # Apply filters
+        if symbol:
+            orders = [order for order in orders if order.symbol == symbol]
+        
+        if side:
+            orders = [order for order in orders if order.side == side]
+        
+        if status:
+            orders = [order for order in orders if order.status == status]
+        
+        if min_liquidity:
+            orders = [order for order in orders if (order.price * order.size) >= min_liquidity]
+        
         return orders
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get orders: {str(e)}")

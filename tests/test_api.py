@@ -33,20 +33,18 @@ class TestAPI:
     @patch('src.main.order_manager')
     def test_get_orders_endpoint(self, mock_manager):
         """Test get orders endpoint."""
-        # Mock order manager
-        mock_orders = [
-            Order(
-                id="1",
-                symbol="BTC",
-                side="Bid",
-                price=50000.0,
-                size=1.0,
-                owner="0x123",
-                timestamp=datetime.now(),
-                status="open"
-            )
-        ]
-        mock_manager.get_orders.return_value = mock_orders
+        # Mock order manager - API now directly accesses orders
+        mock_order = Order(
+            id="1",
+            symbol="BTC",
+            side="Bid",
+            price=50000.0,
+            size=1.0,
+            owner="0x123",
+            timestamp=datetime.now(),
+            status="open"
+        )
+        mock_manager.orders = {"order1": mock_order}
         
         response = client.get("/api/v1/orders")
         assert response.status_code == 200
@@ -58,19 +56,27 @@ class TestAPI:
     @patch('src.main.order_manager')
     def test_get_orders_with_filters(self, mock_manager):
         """Test get orders endpoint with filters."""
-        mock_orders = []
-        mock_manager.get_orders.return_value = mock_orders
+        # Mock order manager - API now directly accesses orders and filters them
+        mock_order = Order(
+            id="1",
+            symbol="BTC",
+            side="Bid",
+            price=50000.0,
+            size=1.0,
+            owner="0x123",
+            timestamp=datetime.now(),
+            status="open"
+        )
+        mock_manager.orders = {"order1": mock_order}
         
         response = client.get("/api/v1/orders?symbol=BTC&side=Bid&min_liquidity=1000")
         assert response.status_code == 200
         
-        # Verify filters were passed to manager
-        mock_manager.get_orders.assert_called_with(
-            symbol="BTC",
-            side="Bid", 
-            min_liquidity=1000.0,
-            status=None
-        )
+        # Verify the response contains filtered data
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["symbol"] == "BTC"
+        assert data[0]["side"] == "Bid"
 
     @patch('src.main.order_manager')
     def test_get_order_by_id(self, mock_manager):

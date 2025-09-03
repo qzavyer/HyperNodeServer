@@ -50,8 +50,8 @@ class TestAPIRoutes:
     @patch('src.main.order_manager')
     def test_get_orders_success(self, mock_manager):
         """Test successful GET /orders request."""
-        # Setup mock
-        mock_manager.get_orders.return_value = [self.mock_order]
+        # Setup mock - API now directly accesses orders
+        mock_manager.orders = {"order1": self.mock_order}
         
         response = client.get("/api/v1/orders")
         
@@ -69,24 +69,38 @@ class TestAPIRoutes:
     @patch('src.main.order_manager')
     def test_get_orders_with_filters(self, mock_manager):
         """Test GET /orders with query parameters."""
-        # Setup mock
-        mock_manager.get_orders.return_value = [self.mock_order]
+        # Setup mock - API now directly accesses orders and filters them
+        mock_manager.orders = {
+            "order1": self.mock_order,
+            "order2": Mock(
+                id="order2",
+                symbol="ETH",
+                side="Ask",
+                price=3000.0,
+                size=5.0,
+                owner="0x0987654321fedcba",
+                timestamp=datetime.now(),
+                status="open"
+            )
+        }
         
         response = client.get("/api/v1/orders?symbol=BTC&side=Bid&min_liquidity=1000&status=open")
         
         assert response.status_code == 200
-        mock_manager.get_orders.assert_called_once_with(
-            symbol="BTC",
-            side="Bid", 
-            min_liquidity=1000.0,
-            status="open"
-        )
+        data = response.json()
+        # Should only return BTC orders with Bid side
+        assert len(data) == 1
+        assert data[0]["symbol"] == "BTC"
+        assert data[0]["side"] == "Bid"
     
     @patch('src.main.order_manager')
     def test_get_orders_error(self, mock_manager):
         """Test GET /orders error handling."""
-        # Setup mock to raise exception
-        mock_manager.get_orders.side_effect = Exception("Database error")
+        # Setup mock to raise exception when accessing orders
+        # Create a mock object for orders instead of a real dict
+        mock_orders = Mock()
+        mock_orders.values = Mock(side_effect=Exception("Database error"))
+        mock_manager.orders = mock_orders
         
         response = client.get("/api/v1/orders")
         
