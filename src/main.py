@@ -148,8 +148,8 @@ async def shutdown_event():
         # Stop WebSocket manager
         await websocket_manager.stop()
         
-        # Cleanup old orders
-        cleaned_count = await order_manager.cleanup_old_orders(settings.CLEANUP_INTERVAL_HOURS)
+        # Cleanup old orders (synchronous method)
+        cleaned_count = order_manager.cleanup_old_orders(settings.CLEANUP_INTERVAL_HOURS)
         logger.info(f"🧹 Cleaned up {cleaned_count} old orders")
         
     except Exception as e:
