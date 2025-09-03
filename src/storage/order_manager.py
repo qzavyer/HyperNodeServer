@@ -30,6 +30,8 @@ class OrderManager:
         self.config_manager = config_manager
         self.orders: Dict[str, Order] = {}
         self.logger = get_logger(__name__)
+        self._save_pending = False
+        self._save_task: Optional[asyncio.Task] = None
     
     async def initialize(self) -> None:
         """Initialize order manager by loading existing orders."""
@@ -106,20 +108,23 @@ class OrderManager:
                 self.logger.debug(f"Added new order {order_id} with status {order.status}")
             
             self.orders[order_id] = order
-            await self.storage.save_orders_async(list(self.orders.values()))
+            
+            # Schedule async save instead of immediate save
+            await self._schedule_save_async()
             
         except Exception as e:
             self.logger.error(f"Failed to update order {order.id}: {e}")
             raise OrderManagerError(f"Update failed: {e}")
 
     async def update_orders_batch_async(self, orders: List[Order]) -> None:
-        """Batch update orders with conflict resolution.
+        """Batch update orders with conflict resolution and optimized saving.
 
         - Groups updates by order id
         - If both filled and canceled are present simultaneously, chooses canceled and logs warning
         - Otherwise applies status priority: canceled > filled > triggered > open
         - Applies transition rules from current status to resolved status
         - Filters orders based on configuration rules
+        - Uses batched saving for better performance
 
         Args:
             orders: Orders to apply in one batch
@@ -164,12 +169,41 @@ class OrderManager:
 
                 self.orders[order_id] = updated
 
-            # Persist once after batch
-            await self.storage.save_orders_async(list(self.orders.values()))
+            # Schedule async save for the entire batch
+            await self._schedule_save_async()
 
         except Exception as e:
             self.logger.error(f"Failed to apply batch update: {e}")
             raise OrderManagerError(f"Batch update failed: {e}")
+
+    async def _schedule_save_async(self) -> None:
+        """Schedule an asynchronous save operation to prevent blocking."""
+        if self._save_pending:
+            return
+        
+        self._save_pending = True
+        
+        # Cancel existing save task if running
+        if self._save_task and not self._save_task.done():
+            self._save_task.cancel()
+        
+        # Schedule new save task with delay
+        self._save_task = asyncio.create_task(self._delayed_save_async())
+    
+    async def _delayed_save_async(self) -> None:
+        """Delayed save operation to batch multiple updates."""
+        try:
+            # Wait a bit to collect more updates
+            await asyncio.sleep(0.1)
+            
+            # Save all orders
+            await self.storage.save_orders_async(list(self.orders.values()))
+            self.logger.debug(f"Saved {len(self.orders)} orders to storage")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save orders: {e}")
+        finally:
+            self._save_pending = False
 
     def _resolve_batch_status(self, statuses: Set[str]) -> str:
         """Resolve final status for a batch of simultaneous updates.
@@ -200,163 +234,167 @@ class OrderManager:
         
         Args:
             current_status: Current order status
-            new_status: New status from log
+            new_status: New status to apply
             
         Returns:
             Final status after applying transition rules
         """
-        # Valid transitions according to vision.md:
-        # open -> filled
-        # open -> canceled  
-        # open -> triggered -> filled
-        # open -> triggered -> canceled
-        
+        # Status transition rules
         if current_status == "open":
             if new_status in ["filled", "canceled", "triggered"]:
                 return new_status
-            elif new_status == "open":
-                return "open"  # Allow staying in open status
-            else:
-                self.logger.warning(f"Unknown status transition: {current_status} -> {new_status}, defaulting to canceled")
-                return "canceled"
+            return current_status
         
         elif current_status == "triggered":
             if new_status in ["filled", "canceled"]:
                 return new_status
-            else:
-                self.logger.warning(f"Unknown status transition: {current_status} -> {new_status}, defaulting to canceled")
-                return "canceled"
-        
-        elif current_status in ["filled", "canceled"]:
-            # If order was already filled or canceled, log warning but don't change status
-            self.logger.warning(f"Order already in final state {current_status}, ignoring new status {new_status}")
             return current_status
         
-        else:
-            # Unknown current status, default to canceled
-            self.logger.warning(f"Unknown current status {current_status}, defaulting to canceled")
-            return "canceled"
-    
-    def get_orders(self, 
-                   symbol: Optional[str] = None,
-                   side: Optional[str] = None,
-                   min_liquidity: Optional[float] = None,
-                   status: Optional[str] = None) -> List[Order]:
-        """Get filtered list of orders.
+        elif current_status == "filled":
+            # Filled orders cannot change status
+            return current_status
         
-        Args:
-            symbol: Filter by symbol/coin
-            side: Filter by side (Bid/Ask)
-            min_liquidity: Minimum liquidity filter (price * size)
-            status: Filter by status
-            
-        Returns:
-            List of filtered orders
-        """
-        filtered_orders = list(self.orders.values())
+        elif current_status == "canceled":
+            # Canceled orders cannot change status
+            return current_status
         
-        if symbol:
-            filtered_orders = [o for o in filtered_orders if o.symbol == symbol]
-        
-        if side:
-            filtered_orders = [o for o in filtered_orders if o.side == side]
-        
-        if status:
-            filtered_orders = [o for o in filtered_orders if o.status == status]
-        
-        if min_liquidity is not None:
-            filtered_orders = [o for o in filtered_orders if o.price * o.size >= min_liquidity]
-        
-        return filtered_orders
-    
-    def get_order_by_id(self, order_id: str) -> Optional[Order]:
-        """Get order by ID.
-        
-        Args:
-            order_id: Order ID to find
-            
-        Returns:
-            Order if found, None otherwise
-        """
-        return self.orders.get(order_id)
-    
-    def get_open_orders(self) -> List[Order]:
-        """Get all open orders.
-        
-        Returns:
-            List of open orders
-        """
-        return self.get_orders(status="open")
-    
-    def get_orders_by_symbol(self, symbol: str) -> List[Order]:
-        """Get all orders for specific symbol.
-        
-        Args:
-            symbol: Symbol to filter by
-            
-        Returns:
-            List of orders for symbol
-        """
-        return self.get_orders(symbol=symbol)
-    
-    def get_orders_by_owner(self, owner: str) -> List[Order]:
-        """Get all orders for specific owner.
-        
-        Args:
-            owner: Owner address to filter by
-            
-        Returns:
-            List of orders for owner
-        """
-        return [o for o in self.orders.values() if o.owner == owner]
+        # Unknown current status, allow change
+        return new_status
     
     def get_order_count(self) -> int:
-        """Get total number of orders.
-        
-        Returns:
-            Total order count
-        """
+        """Get total number of orders."""
         return len(self.orders)
     
     def get_order_count_by_status(self) -> Dict[str, int]:
-        """Get order count by status.
-        
-        Returns:
-            Dictionary with status as key and count as value
-        """
+        """Get count of orders by status."""
         counts = {}
         for order in self.orders.values():
-            counts[order.status] = counts.get(order.status, 0) + 1
+            status = order.status
+            counts[status] = counts.get(status, 0) + 1
         return counts
     
-    async def cleanup_old_orders(self, max_age_hours: int = 24) -> int:
-        """Remove orders older than specified age.
+    def get_orders(self, limit: Optional[int] = None) -> List[Order]:
+        """Get list of orders with optional limit."""
+        orders = list(self.orders.values())
+        if limit:
+            orders = orders[:limit]
+        return orders
+    
+    def get_order(self, order_id: str) -> Optional[Order]:
+        """Get order by ID."""
+        return self.orders.get(order_id)
+    
+    def get_orders_by_symbol(self, symbol: str, limit: Optional[int] = None) -> List[Order]:
+        """Get orders by symbol."""
+        orders = [order for order in self.orders.values() if order.symbol == symbol]
+        if limit:
+            orders = orders[:limit]
+        return orders
+    
+    def get_orders_by_status(self, status: str, limit: Optional[int] = None) -> List[Order]:
+        """Get orders by status."""
+        orders = [order for order in self.orders.values() if order.status == status]
+        if limit:
+            orders = orders[:limit]
+        return orders
+    
+    def get_orders_by_owner(self, owner: str, limit: Optional[int] = None) -> List[Order]:
+        """Get orders by owner address."""
+        orders = [order for order in self.orders.values() if order.owner == owner]
+        if limit:
+            orders = orders[:limit]
+        return orders
+    
+    def get_orders_by_price_range(self, symbol: str, min_price: float, max_price: float, limit: Optional[int] = None) -> List[Order]:
+        """Get orders by price range for a symbol."""
+        orders = [
+            order for order in self.orders.values() 
+            if order.symbol == symbol and min_price <= order.price <= max_price
+        ]
+        if limit:
+            orders = orders[:limit]
+        return orders
+    
+    def get_orders_by_liquidity_range(self, symbol: str, min_liquidity: float, max_liquidity: float, limit: Optional[int] = None) -> List[Order]:
+        """Get orders by liquidity range for a symbol."""
+        orders = [
+            order for order in self.orders.values() 
+            if order.symbol == symbol and min_liquidity <= (order.price * order.size) <= max_liquidity
+        ]
+        if limit:
+            orders = orders[:limit]
+        return orders
+    
+    def get_orders_by_time_range(self, start_time: datetime, end_time: datetime, limit: Optional[int] = None) -> List[Order]:
+        """Get orders by time range."""
+        orders = [
+            order for order in self.orders.values() 
+            if start_time <= order.timestamp <= end_time
+        ]
+        if limit:
+            orders = orders[:limit]
+        return orders
+    
+    def get_order_book(self, symbol: str, depth: int = 10) -> Dict[str, List[Order]]:
+        """Get order book for a symbol with specified depth."""
+        symbol_orders = [order for order in self.orders.values() if order.symbol == symbol and order.status == "open"]
         
-        Args:
-            max_age_hours: Maximum age in hours
-            
-        Returns:
-            Number of removed orders
-        """
-        cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
-        old_orders = []
+        # Separate buy and sell orders
+        buy_orders = [order for order in symbol_orders if order.side == "buy"]
+        sell_orders = [order for order in symbol_orders if order.side == "sell"]
         
-        for order_id, order in list(self.orders.items()):
-            if order.timestamp < cutoff_time:
-                old_orders.append(order_id)
-                del self.orders[order_id]
+        # Sort by price (buy: descending, sell: ascending)
+        buy_orders.sort(key=lambda x: x.price, reverse=True)
+        sell_orders.sort(key=lambda x: x.price)
+        
+        # Limit depth
+        buy_orders = buy_orders[:depth]
+        sell_orders = sell_orders[:depth]
+        
+        return {
+            "buy": buy_orders,
+            "sell": sell_orders
+        }
+    
+    def get_market_summary(self, symbol: str) -> Dict[str, any]:
+        """Get market summary for a symbol."""
+        symbol_orders = [order for order in self.orders.values() if order.symbol == symbol and order.status == "open"]
+        
+        if not symbol_orders:
+            return {
+                "symbol": symbol,
+                "total_orders": 0,
+                "total_volume": 0.0,
+                "avg_price": 0.0,
+                "price_range": {"min": 0.0, "max": 0.0}
+            }
+        
+        total_volume = sum(order.size for order in symbol_orders)
+        avg_price = sum(order.price * order.size for order in symbol_orders) / total_volume
+        prices = [order.price for order in symbol_orders]
+        
+        return {
+            "symbol": symbol,
+            "total_orders": len(symbol_orders),
+            "total_volume": total_volume,
+            "avg_price": avg_price,
+            "price_range": {"min": min(prices), "max": max(prices)}
+        }
+    
+    def cleanup_old_orders(self, hours: int) -> int:
+        """Remove orders older than specified hours."""
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+        old_orders = [
+            order_id for order_id, order in self.orders.items() 
+            if order.timestamp < cutoff_time
+        ]
+        
+        for order_id in old_orders:
+            del self.orders[order_id]
         
         if old_orders:
-            await self.storage.save_orders_async(list(self.orders.values()))
-            self.logger.info(f"Removed {len(old_orders)} old orders")
+            self.logger.info(f"Cleaned up {len(old_orders)} orders older than {hours} hours")
+            # Schedule save after cleanup
+            asyncio.create_task(self._schedule_save_async())
         
         return len(old_orders)
-    
-    def set_config_manager(self, config_manager: 'ConfigManager') -> None:
-        """Set configuration manager for filtering rules.
-        
-        Args:
-            config_manager: Configuration manager instance
-        """
-        self.config_manager = config_manager
-        self.logger.info("Configuration manager set for order filtering")

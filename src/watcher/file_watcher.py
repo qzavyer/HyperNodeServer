@@ -40,8 +40,9 @@ class FileWatcher:
         self.logs_path = Path(settings.NODE_LOGS_PATH).expanduser()
         self.observer = Observer()
         self.handler = LogFileHandler(self)
-        self.parser = LogParser()
+        self.parser = LogParser(chunk_size=8192, batch_size=1000)
         self.is_running = False
+        self.processing_files: set = set()  # Track files being processed
         
     async def start_async(self) -> None:
         """Starts file monitoring."""
@@ -85,26 +86,59 @@ class FileWatcher:
             logger.error(f"Error during initial file scan: {e}")
     
     async def _process_file_async(self, file_path: Path) -> None:
-        """Processes a single log file."""
+        """Processes a single log file asynchronously with timeout protection."""
+        # Prevent concurrent processing of the same file
+        if file_path in self.processing_files:
+            logger.debug(f"File {file_path} is already being processed, skipping")
+            return
+        
+        self.processing_files.add(file_path)
+        
         try:
             logger.debug(f"Processing file: {file_path}")
             
-            # Read file with retry logic
-            lines = await self._read_file_with_retry_async(file_path)
+            # Check file size and apply limits
+            file_size = file_path.stat().st_size
+            file_size_gb = file_size / (1024**3)
             
-            # Parse and extract orders
-            parsed_data = self.parser.parse_file(str(file_path))
+            if file_size_gb > settings.MAX_FILE_SIZE_GB:
+                logger.warning(f"File {file_path} too large ({file_size_gb:.2f} GB), skipping")
+                return
             
-            if parsed_data:
-                # Update order manager with new data
-                for order in parsed_data:
-                    await self.order_manager.update_order(order)
-                logger.info(f"Processed {len(parsed_data)} orders from {file_path}")
+            # Use timeout parsing for large files
+            timeout_seconds = min(60, max(10, int(file_size_gb * 5)))  # 5s per GB, min 10s, max 60s
+            max_orders = settings.MAX_ORDERS_PER_FILE if hasattr(settings, 'MAX_ORDERS_PER_FILE') else None
+            
+            logger.info(f"Processing {file_path} ({file_size_gb:.2f} GB) with {timeout_seconds}s timeout")
+            
+            # Parse file with timeout and batching
+            orders = await self.parser.parse_file_with_timeout_async(
+                str(file_path), 
+                timeout_seconds=timeout_seconds,
+                max_orders=max_orders
+            )
+            
+            if orders:
+                # Process orders in batches to prevent blocking
+                batch_size = 500
+                for i in range(0, len(orders), batch_size):
+                    batch = orders[i:i + batch_size]
+                    await self.order_manager.update_orders_batch_async(batch)
+                    
+                    # Small delay between batches to prevent blocking
+                    if i + batch_size < len(orders):
+                        await asyncio.sleep(0.01)
+                
+                logger.info(f"Processed {len(orders)} orders from {file_path}")
             else:
                 logger.debug(f"No orders found in {file_path}")
                 
+        except asyncio.TimeoutError:
+            logger.warning(f"Processing timeout for {file_path}")
         except Exception as e:
             logger.error(f"Error processing file {file_path}: {e}")
+        finally:
+            self.processing_files.discard(file_path)
     
     async def _read_file_with_retry_async(self, file_path: Path) -> List[str]:
         """Reads file with retry logic."""

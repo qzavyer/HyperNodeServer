@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     FILE_READ_RETRY_ATTEMPTS: int = 3
     FILE_READ_RETRY_DELAY: float = 1.0
     
+    # Performance optimization settings
+    MAX_FILE_SIZE_GB: float = 50.0  # Maximum file size to process (GB)
+    MAX_ORDERS_PER_FILE: Optional[int] = 1000000  # Maximum orders per file (None = unlimited)
+    CHUNK_SIZE_BYTES: int = 8192  # File reading chunk size
+    BATCH_SIZE: int = 1000  # Orders processing batch size
+    PROCESSING_TIMEOUT_PER_GB: int = 5  # Seconds per GB for file processing
+    
     # API settings
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
