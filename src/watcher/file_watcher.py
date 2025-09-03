@@ -24,16 +24,18 @@ class LogFileHandler(FileSystemEventHandler):
     def on_modified(self, event):
         """Called when a file is modified."""
         if not event.is_directory and event.src_path.endswith('.json'):
-            asyncio.create_task(self.file_watcher._process_file_async(Path(event.src_path)))
+            # Запускаем обработку в фоне, не блокируя event loop
+            asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
     
     def on_created(self, event):
         """Called when a new file is created."""
         if not event.is_directory and event.src_path.endswith('.json'):
-            asyncio.create_task(self.file_watcher._process_file_async(Path(event.src_path)))
+            # Запускаем обработку в фоне, не блокируя event loop
+            asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
 
 
 class FileWatcher:
-    """Monitors log directories for file changes."""
+    """Monitors log directories for file changes with background processing."""
     
     def __init__(self, order_manager: OrderManager):
         self.order_manager = order_manager
@@ -43,9 +45,10 @@ class FileWatcher:
         self.parser = LogParser(chunk_size=8192, batch_size=1000)
         self.is_running = False
         self.processing_files: set = set()  # Track files being processed
+        self.pending_files: asyncio.Queue = asyncio.Queue()  # Queue for file processing
         
     async def start_async(self) -> None:
-        """Starts file monitoring."""
+        """Starts file monitoring with background processing."""
         logger.info(f"Starting file watcher for {self.logs_path}")
         
         # Ensure logs directory exists
@@ -53,6 +56,9 @@ class FileWatcher:
         
         # Schedule initial scan of latest file
         asyncio.create_task(self.scan_latest_file_async())
+        
+        # Start background file processor
+        asyncio.create_task(self._background_file_processor())
         
         # Schedule periodic cleanup
         asyncio.create_task(self._cleanup_loop_async())
@@ -62,7 +68,7 @@ class FileWatcher:
         self.observer.start()
         self.is_running = True
         
-        logger.info("File watcher started successfully")
+        logger.info("File watcher started successfully with background processing")
     
     async def stop_async(self) -> None:
         """Stops file monitoring."""
@@ -78,16 +84,62 @@ class FileWatcher:
             latest_file = self._find_latest_file()
             if latest_file:
                 logger.info(f"Scanning latest file: {latest_file}")
-                await self._process_file_async(latest_file)
+                await self._schedule_file_processing(latest_file)
             else:
                 logger.debug(f"No log files found for initial scan\n{self.logs_path}")
                 logger.info(f"No log files found for initial scan")
         except Exception as e:
             logger.error(f"Error during initial file scan: {e}")
     
-    async def _process_file_async(self, file_path: Path) -> None:
-        """Processes a single log file asynchronously with timeout protection."""
-        # Prevent concurrent processing of the same file
+    async def _schedule_file_processing(self, file_path: Path) -> None:
+        """Schedules file for background processing without blocking API."""
+        # Проверяем, не обрабатывается ли уже файл
+        if file_path in self.processing_files:
+            logger.debug(f"File {file_path} is already scheduled for processing, skipping")
+            return
+        
+        # Проверяем размер файла
+        try:
+            file_size = file_path.stat().st_size
+            file_size_gb = file_size / (1024**3)
+            
+            if file_size_gb > settings.MAX_FILE_SIZE_GB:
+                logger.warning(f"File {file_path} too large ({file_size_gb:.2f} GB), skipping")
+                return
+                
+        except Exception as e:
+            logger.error(f"Error checking file size for {file_path}: {e}")
+            return
+        
+        # Добавляем файл в очередь для фоновой обработки
+        await self.pending_files.put(file_path)
+        logger.info(f"Scheduled {file_path} ({file_size_gb:.2f} GB) for background processing")
+    
+    async def _background_file_processor(self) -> None:
+        """Background processor that handles files without blocking API."""
+        logger.info("Background file processor started")
+        
+        while self.is_running:
+            try:
+                # Ждем файл для обработки (неблокирующе)
+                try:
+                    file_path = await asyncio.wait_for(
+                        self.pending_files.get(), 
+                        timeout=1.0
+                    )
+                except asyncio.TimeoutError:
+                    # Таймаут - проверяем, нужно ли продолжать работу
+                    continue
+                
+                # Обрабатываем файл в фоне
+                await self._process_file_background(file_path)
+                
+            except Exception as e:
+                logger.error(f"Error in background file processor: {e}")
+                await asyncio.sleep(1)  # Пауза перед следующей попыткой
+    
+    async def _process_file_background(self, file_path: Path) -> None:
+        """Processes a single log file in background without blocking API."""
         if file_path in self.processing_files:
             logger.debug(f"File {file_path} is already being processed, skipping")
             return
@@ -95,48 +147,26 @@ class FileWatcher:
         self.processing_files.add(file_path)
         
         try:
-            logger.debug(f"Processing file: {file_path}")
+            logger.info(f"Starting background processing of {file_path}")
             
-            # Check file size and apply limits
-            file_size = file_path.stat().st_size
-            file_size_gb = file_size / (1024**3)
-            
-            if file_size_gb > settings.MAX_FILE_SIZE_GB:
-                logger.warning(f"File {file_path} too large ({file_size_gb:.2f} GB), skipping")
-                return
-            
-            # Use timeout parsing for large files
-            timeout_seconds = min(60, max(10, int(file_size_gb * 5)))  # 5s per GB, min 10s, max 60s
-            max_orders = settings.MAX_ORDERS_PER_FILE if hasattr(settings, 'MAX_ORDERS_PER_FILE') else None
-            
-            logger.info(f"Processing {file_path} ({file_size_gb:.2f} GB) with {timeout_seconds}s timeout")
-            
-            # Parse file with timeout and batching
-            orders = await self.parser.parse_file_with_timeout_async(
-                str(file_path), 
-                timeout_seconds=timeout_seconds,
-                max_orders=max_orders
-            )
-            
-            if orders:
-                # Process orders in batches to prevent blocking
-                batch_size = 500
-                for i in range(0, len(orders), batch_size):
-                    batch = orders[i:i + batch_size]
-                    await self.order_manager.update_orders_batch_async(batch)
-                    
-                    # Small delay between batches to prevent blocking
-                    if i + batch_size < len(orders):
-                        await asyncio.sleep(0.01)
+            # Обрабатываем файл по частям с паузами между батчами
+            total_orders = 0
+            async for batch in self.parser.parse_file_async(str(file_path)):
+                # Обновляем ордера батчами
+                await self.order_manager.update_orders_batch_async(batch)
+                total_orders += len(batch)
                 
-                logger.info(f"Processed {len(orders)} orders from {file_path}")
-            else:
-                logger.debug(f"No orders found in {file_path}")
+                # Пауза между батчами, чтобы не блокировать API
+                await asyncio.sleep(0.1)
                 
-        except asyncio.TimeoutError:
-            logger.warning(f"Processing timeout for {file_path}")
+                # Логируем прогресс
+                if total_orders % 10000 == 0:
+                    logger.info(f"Processed {total_orders} orders from {file_path}")
+            
+            logger.info(f"Completed background processing: {total_orders} orders from {file_path}")
+            
         except Exception as e:
-            logger.error(f"Error processing file {file_path}: {e}")
+            logger.error(f"Error processing file {file_path} in background: {e}")
         finally:
             self.processing_files.discard(file_path)
     
@@ -184,3 +214,12 @@ class FileWatcher:
             logger.info(f"Cleaned up {cleaned_count} old orders")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
+    
+    def get_processing_status(self) -> dict:
+        """Returns current processing status for monitoring."""
+        return {
+            "is_running": self.is_running,
+            "processing_files_count": len(self.processing_files),
+            "pending_files_count": self.pending_files.qsize(),
+            "processing_files": list(str(f) for f in self.processing_files)
+        }

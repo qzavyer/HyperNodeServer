@@ -164,7 +164,7 @@ async def performance_info():
     """Performance information endpoint."""
     return {
         "file_watcher_running": file_watcher.is_running,
-        "processing_files_count": len(file_watcher.processing_files),
+        "background_processing": file_watcher.get_processing_status(),
         "memory_usage": {
             "orders_in_memory": order_manager.get_order_count(),
             "estimated_memory_mb": order_manager.get_order_count() * 0.001  # Rough estimate
