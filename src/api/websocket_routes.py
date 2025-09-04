@@ -18,25 +18,54 @@ def set_websocket_manager(manager: WebSocketManager):
 @router.websocket("/ws/orderUpdate")
 async def websocket_order_update(websocket: WebSocket):
     """WebSocket endpoint for real-time order updates."""
+    
+    logger.info("=== WebSocket Connection Attempt ===")
+    logger.info(f"Client IP: {websocket.client.host}")
+    logger.info(f"User-Agent: {websocket.headers.get('user-agent')}")
+    logger.info(f"Authorization: {websocket.headers.get('authorization')}")
+    logger.info(f"Protocol: {websocket.headers.get('sec-websocket-protocol')}")
+    logger.info(f"All Headers: {dict(websocket.headers)}")
+    
     if not websocket_manager:
+        logger.error("WebSocket manager not initialized")
         await websocket.close(code=1000, reason="WebSocket manager not initialized")
         return
     
     try:
-        await websocket_manager.connect(websocket, "orderUpdate")
+        await websocket.accept()
+        logger.info("✅ WebSocket connection accepted")
         
-        # Держим соединение открытым
+        await websocket_manager.connect(websocket, "orderUpdate")
+        logger.info("✅ WebSocket connected to manager")
+        
         while True:
-            # Ждем сообщения от клиента (можно использовать для ping/pong)
-            data = await websocket.receive_text()
-            logger.debug(f"Received message from orderUpdate client: {data}")
-            
+            try:
+                data = await websocket.receive_text()
+                logger.debug(f"Received message from orderUpdate client: {data}")
+                
+                if data == "ping":
+                    await websocket.send_text("pong")
+                    logger.debug("Sent pong response")
+                
+            except WebSocketDisconnect:
+                logger.info("WebSocket orderUpdate client disconnected")
+                break
+                
     except WebSocketDisconnect:
-        logger.info("WebSocket orderUpdate client disconnected")
+        logger.info("WebSocket orderUpdate client disconnected during handshake")
     except Exception as e:
         logger.error(f"Error in orderUpdate WebSocket: {e}")
+        try:
+            await websocket.close(code=1011, reason=f"Internal error: {str(e)}")
+        except:
+            pass
     finally:
-        await websocket_manager.disconnect(websocket)
+        try:
+            await websocket_manager.disconnect(websocket)
+            logger.info("✅ WebSocket disconnected from manager")
+        except Exception as e:
+            logger.error(f"Error disconnecting from manager: {e}")
+
 
 @router.websocket("/ws/orderBatch")
 async def websocket_order_batch(websocket: WebSocket):
