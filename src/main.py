@@ -16,6 +16,7 @@ from src.storage.config_manager import ConfigManager
 from src.watcher.file_watcher import FileWatcher
 from src.websocket.websocket_manager import WebSocketManager
 from src.notifications.order_notifier import OrderNotifier
+from src.cleanup.directory_cleaner import DirectoryCleaner
 from src.utils.logger import setup_logger
 from config.settings import settings
 
@@ -110,6 +111,7 @@ websocket_manager = WebSocketManager()
 order_notifier = OrderNotifier(websocket_manager, config_manager)
 order_manager = OrderManager(file_storage, config_manager, order_notifier)
 file_watcher = FileWatcher(order_manager)
+directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH)
 
 # Set WebSocket manager in routes
 set_websocket_manager(websocket_manager)
@@ -133,6 +135,10 @@ async def startup_event():
         
         # Start file watcher
         await file_watcher.start_async()
+        
+        # Start directory cleaner
+        asyncio.create_task(directory_cleaner.start_periodic_cleanup_async())
+        logger.info("✅ Directory cleaner started successfully")
         
     except Exception as e:
         logger.error(f"Failed to start application: {e}")
@@ -192,5 +198,6 @@ async def performance_info():
             "max_orders_per_file": settings.MAX_ORDERS_PER_FILE,
             "chunk_size_bytes": settings.CHUNK_SIZE_BYTES,
             "batch_size": settings.BATCH_SIZE
-        }
+        },
+        "directory_cleanup": directory_cleaner.get_cleanup_stats()
     }

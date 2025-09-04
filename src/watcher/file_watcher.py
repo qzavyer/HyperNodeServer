@@ -63,8 +63,16 @@ class FileWatcher:
         # Schedule periodic cleanup
         asyncio.create_task(self._cleanup_loop_async())
         
-        # Start file system monitoring
-        self.observer.schedule(self.handler, str(self.logs_path), recursive=True)
+        # Start file system monitoring for node_order_statuses/hourly/
+        hourly_path = self.logs_path / "node_order_statuses" / "hourly"
+        if hourly_path.exists():
+            self.observer.schedule(self.handler, str(hourly_path), recursive=True)
+            logger.info(f"Monitoring directory: {hourly_path}")
+        else:
+            # Fallback to monitoring base directory if hourly doesn't exist yet
+            self.observer.schedule(self.handler, str(self.logs_path), recursive=True)
+            logger.info(f"Monitoring base directory (hourly not found): {self.logs_path}")
+        
         self.observer.start()
         self.is_running = True
         
@@ -184,14 +192,24 @@ class FileWatcher:
                     raise
     
     def _find_latest_file(self) -> Optional[Path]:
-        """Finds the most recent log file."""
+        """Finds the most recent log file in node_order_statuses/hourly/ subdirectories."""
         try:
-            json_files = list(self.logs_path.rglob("*"))
+            # Ищем файлы в поддиректориях node_order_statuses/hourly/
+            hourly_path = self.logs_path / "node_order_statuses" / "hourly"
+            
+            if not hourly_path.exists():
+                logger.debug(f"Hourly directory not found: {hourly_path}")
+                return None
+            
+            # Ищем JSON файлы в поддиректориях
+            json_files = list(hourly_path.rglob("*.json"))
             if not json_files:
+                logger.debug(f"No JSON files found in {hourly_path}")
                 return None
             
             # Sort by modification time, newest first
             latest_file = max(json_files, key=lambda f: f.stat().st_mtime)
+            logger.debug(f"Found latest file: {latest_file}")
             return latest_file
         except Exception as e:
             logger.error(f"Error finding latest file: {e}")

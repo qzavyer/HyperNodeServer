@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # Cleanup settings
     CLEANUP_INTERVAL_HOURS: int = 2
     
+    # Directory cleanup settings
+    DIRECTORY_CLEANUP_INTERVAL_HOURS: int = 1  # Очистка директорий каждый час
+    FILE_RETENTION_HOURS: int = 1  # Файлы старше 1 часа удаляются
+    
     # File monitoring and retry settings
     FILE_READ_RETRY_ATTEMPTS: int = 3
     FILE_READ_RETRY_DELAY: float = 1.0
