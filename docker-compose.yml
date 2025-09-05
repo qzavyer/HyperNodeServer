@@ -11,7 +11,7 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./config:/app/config
-      - ~/hl/data:/app/node_logs:ro
+      - ~/hl/data:/app/node_logs
     environment:
       - API_HOST=0.0.0.0
       - API_PORT=8000
