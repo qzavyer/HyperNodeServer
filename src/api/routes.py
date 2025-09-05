@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional, Dict, Any
 
-from src.storage.models import Order, Config
+from src.storage.models import Order, Config, SymbolConfig
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 
@@ -148,3 +148,22 @@ async def update_config_async(
         return await manager.update_config_async(updates)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update config: {str(e)}")
+
+@router.put("/config/symbols", response_model=Config)
+async def update_symbols_async(
+    symbols: List[SymbolConfig],
+    manager: ConfigManager = Depends(get_config_manager)
+) -> Config:
+    """Update symbols configuration only.
+
+    Args:
+        symbols: List of symbol configurations
+        manager: Config manager instance
+
+    Returns:
+        Updated configuration
+    """
+    try:
+        return await manager.update_symbols_async(symbols)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to update symbols: {str(e)}")

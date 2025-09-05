@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch, AsyncMock
 
 from src.storage.config_manager import ConfigManager, ConfigError
-from src.storage.models import Config
+from src.storage.models import Config, SymbolConfig
 
 class TestConfigManager:
     """Tests for ConfigManager class."""
@@ -240,3 +240,139 @@ class TestConfigManager:
             
             with pytest.raises(ConfigError, match="Configuration update failed"):
                 await self.manager.update_config_async(updates)
+    
+    @pytest.mark.asyncio
+    async def test_update_symbols_async(self):
+        """Test updating symbols configuration only."""
+        with patch('src.storage.config_manager.settings') as mock_settings:
+            mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.CLEANUP_INTERVAL_HOURS = 5
+            mock_settings.API_HOST = "127.0.0.1"
+            mock_settings.API_PORT = 9000
+            mock_settings.LOG_LEVEL = "INFO"
+            mock_settings.LOG_FILE_PATH = "test.log"
+            mock_settings.LOG_MAX_SIZE_MB = 50
+            mock_settings.LOG_RETENTION_DAYS = 15
+            mock_settings.DATA_DIR = "test_data"
+            mock_settings.CONFIG_FILE_PATH = "test_config.json"
+            mock_settings.MAX_ORDERS_PER_REQUEST = 500
+            mock_settings.FILE_READ_RETRY_ATTEMPTS = 2
+            mock_settings.FILE_READ_RETRY_DELAY = 0.5
+            
+            # Load initial config
+            original_config = await self.manager.load_config_async()
+            original_port = original_config.api_port
+            original_host = original_config.api_host
+            
+            # Create new symbols
+            new_symbols = [
+                SymbolConfig(symbol="BTC", min_liquidity=10000.0, price_deviation=0.01),
+                SymbolConfig(symbol="ETH", min_liquidity=5000.0, price_deviation=0.02),
+                SymbolConfig(symbol="SOL", min_liquidity=1000.0, price_deviation=0.05)
+            ]
+            
+            # Update symbols only
+            updated_config = await self.manager.update_symbols_async(new_symbols)
+            
+            # Verify symbols were updated
+            assert len(updated_config.symbols_config) == 3
+            assert updated_config.symbols_config[0].symbol == "BTC"
+            assert updated_config.symbols_config[0].min_liquidity == 10000.0
+            assert updated_config.symbols_config[0].price_deviation == 0.01
+            assert updated_config.symbols_config[1].symbol == "ETH"
+            assert updated_config.symbols_config[1].min_liquidity == 5000.0
+            assert updated_config.symbols_config[2].symbol == "SOL"
+            assert updated_config.symbols_config[2].min_liquidity == 1000.0
+            
+            # Verify other settings remained unchanged
+            assert updated_config.api_port == original_port
+            assert updated_config.api_host == original_host
+            assert updated_config.log_level == "INFO"
+            
+            # Verify file was updated
+            with open(self.config_file, 'r') as f:
+                saved_data = json.load(f)
+            
+            assert len(saved_data["symbols_config"]) == 3
+            assert saved_data["symbols_config"][0]["symbol"] == "BTC"
+            assert saved_data["symbols_config"][0]["min_liquidity"] == 10000.0
+            assert saved_data["symbols_config"][1]["symbol"] == "ETH"
+            assert saved_data["symbols_config"][2]["symbol"] == "SOL"
+            
+            # Verify other settings remained unchanged in file
+            assert saved_data["api_port"] == original_port
+            assert saved_data["api_host"] == original_host
+    
+    @pytest.mark.asyncio
+    async def test_update_symbols_async_empty_list(self):
+        """Test updating symbols with empty list."""
+        with patch('src.storage.config_manager.settings') as mock_settings:
+            mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.CLEANUP_INTERVAL_HOURS = 5
+            mock_settings.API_HOST = "127.0.0.1"
+            mock_settings.API_PORT = 9000
+            mock_settings.LOG_LEVEL = "INFO"
+            mock_settings.LOG_FILE_PATH = "test.log"
+            mock_settings.LOG_MAX_SIZE_MB = 50
+            mock_settings.LOG_RETENTION_DAYS = 15
+            mock_settings.DATA_DIR = "test_data"
+            mock_settings.CONFIG_FILE_PATH = "test_config.json"
+            mock_settings.MAX_ORDERS_PER_REQUEST = 500
+            mock_settings.FILE_READ_RETRY_ATTEMPTS = 2
+            mock_settings.FILE_READ_RETRY_DELAY = 0.5
+            
+            await self.manager.load_config_async()
+            
+            # Add some symbols first
+            symbols = [SymbolConfig(symbol="BTC", min_liquidity=1000.0, price_deviation=0.01)]
+            await self.manager.update_symbols_async(symbols)
+            
+            # Clear symbols
+            updated_config = await self.manager.update_symbols_async([])
+            
+            assert len(updated_config.symbols_config) == 0
+            
+            # Verify file was updated
+            with open(self.config_file, 'r') as f:
+                saved_data = json.load(f)
+            
+            assert len(saved_data["symbols_config"]) == 0
+    
+    @pytest.mark.asyncio
+    async def test_update_symbols_async_handles_save_error(self):
+        """Test updating symbols handles save error."""
+        with patch('src.storage.config_manager.settings') as mock_settings:
+            mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.CLEANUP_INTERVAL_HOURS = 5
+            mock_settings.API_HOST = "127.0.0.1"
+            mock_settings.API_PORT = 9000
+            mock_settings.LOG_LEVEL = "INFO"
+            mock_settings.LOG_FILE_PATH = "test.log"
+            mock_settings.LOG_MAX_SIZE_MB = 50
+            mock_settings.LOG_RETENTION_DAYS = 15
+            mock_settings.DATA_DIR = "test_data"
+            mock_settings.CONFIG_FILE_PATH = "test_config.json"
+            mock_settings.MAX_ORDERS_PER_REQUEST = 500
+            mock_settings.FILE_READ_RETRY_ATTEMPTS = 2
+            mock_settings.FILE_READ_RETRY_DELAY = 0.5
+            
+            await self.manager.load_config_async()
+            
+            # Valid symbols
+            valid_symbols = [
+                SymbolConfig(symbol="BTC", min_liquidity=1000.0, price_deviation=0.01)
+            ]
+            
+            # Mock save_config_async to raise an exception
+            with patch.object(self.manager, 'save_config_async', side_effect=Exception("Save failed")):
+                with pytest.raises(ConfigError, match="Symbols configuration update failed"):
+                    await self.manager.update_symbols_async(valid_symbols)
+    
+    @pytest.mark.asyncio
+    async def test_update_symbols_async_config_not_loaded(self):
+        """Test updating symbols when config not loaded."""
+        # Don't load config first
+        symbols = [SymbolConfig(symbol="BTC", min_liquidity=1000.0, price_deviation=0.01)]
+        
+        with pytest.raises(ConfigError, match="Symbols configuration update failed"):
+            await self.manager.update_symbols_async(symbols)

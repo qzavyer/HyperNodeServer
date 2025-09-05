@@ -313,3 +313,126 @@ class TestAPIRoutes:
         assert data["order_manager_stats"]["filled"] == 30
         assert data["order_manager_stats"]["canceled"] == 15
         assert data["order_manager_stats"]["triggered"] == 5
+    
+    @patch('src.main.config_manager')
+    def test_update_symbols_success(self, mock_config_manager):
+        """Test PUT /config/symbols success."""
+        # Setup mock
+        updated_config = Config(
+            node_logs_path="/test/path",
+            cleanup_interval_hours=2,
+            api_host="0.0.0.0",
+            api_port=8000,
+            log_level="DEBUG",
+            log_file_path="logs/app.log",
+            log_max_size_mb=100,
+            log_retention_days=30,
+            data_dir="data",
+            config_file_path="config/config.json",
+            max_orders_per_request=1000,
+            file_read_retry_attempts=3,
+            file_read_retry_delay=1.0,
+            symbols_config=[
+                SymbolConfig(symbol="BTC", min_liquidity=10000.0, price_deviation=0.01),
+                SymbolConfig(symbol="ETH", min_liquidity=5000.0, price_deviation=0.02)
+            ]
+        )
+        
+        async def mock_update_symbols(symbols):
+            return updated_config
+        
+        mock_config_manager.update_symbols_async.side_effect = mock_update_symbols
+        
+        symbols_data = [
+            {"symbol": "BTC", "min_liquidity": 10000.0, "price_deviation": 0.01},
+            {"symbol": "ETH", "min_liquidity": 5000.0, "price_deviation": 0.02}
+        ]
+        
+        response = client.put("/api/v1/config/symbols", json=symbols_data)
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["symbols_config"]) == 2
+        assert data["symbols_config"][0]["symbol"] == "BTC"
+        assert data["symbols_config"][0]["min_liquidity"] == 10000.0
+        assert data["symbols_config"][0]["price_deviation"] == 0.01
+        assert data["symbols_config"][1]["symbol"] == "ETH"
+        assert data["symbols_config"][1]["min_liquidity"] == 5000.0
+        assert data["symbols_config"][1]["price_deviation"] == 0.02
+        
+        # Verify the update method was called
+        mock_config_manager.update_symbols_async.assert_called_once()
+        call_args = mock_config_manager.update_symbols_async.call_args[0][0]
+        assert len(call_args) == 2
+        assert call_args[0].symbol == "BTC"
+        assert call_args[0].min_liquidity == 10000.0
+        assert call_args[1].symbol == "ETH"
+        assert call_args[1].min_liquidity == 5000.0
+    
+    @patch('src.main.config_manager')
+    def test_update_symbols_empty_list(self, mock_config_manager):
+        """Test PUT /config/symbols with empty list."""
+        # Setup mock
+        updated_config = self.mock_config.model_copy(update={"symbols_config": []})
+        
+        async def mock_update_symbols(symbols):
+            return updated_config
+        
+        mock_config_manager.update_symbols_async.side_effect = mock_update_symbols
+        
+        response = client.put("/api/v1/config/symbols", json=[])
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["symbols_config"]) == 0
+        
+        # Verify the update method was called with empty list
+        mock_config_manager.update_symbols_async.assert_called_once()
+        call_args = mock_config_manager.update_symbols_async.call_args[0][0]
+        assert len(call_args) == 0
+    
+    @patch('src.main.config_manager')
+    def test_update_symbols_invalid_data(self, mock_config_manager):
+        """Test PUT /config/symbols with invalid symbol data."""
+        # Setup mock to raise exception for invalid data
+        mock_config_manager.update_symbols_async.side_effect = Exception("Invalid symbol data")
+        
+        invalid_symbols = [
+            {"symbol": "BTC", "min_liquidity": -1000.0, "price_deviation": 0.01}  # Negative liquidity
+        ]
+        
+        response = client.put("/api/v1/config/symbols", json=invalid_symbols)
+        
+        # Pydantic validation will catch this and return 422
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+    
+    @patch('src.main.config_manager')
+    def test_update_symbols_malformed_request(self, mock_config_manager):
+        """Test PUT /config/symbols with malformed request data."""
+        # Test with invalid JSON structure
+        invalid_data = [
+            {"symbol": "BTC"}  # Missing required fields
+        ]
+        
+        response = client.put("/api/v1/config/symbols", json=invalid_data)
+        
+        # Should get 422 for validation error (pydantic validation)
+        assert response.status_code == 422
+    
+    @patch('src.main.config_manager')
+    def test_update_symbols_config_manager_error(self, mock_config_manager):
+        """Test PUT /config/symbols with ConfigManager exception."""
+        # Setup mock to raise exception during processing
+        mock_config_manager.update_symbols_async.side_effect = Exception("Config manager error")
+        
+        valid_symbols = [
+            {"symbol": "BTC", "min_liquidity": 1000.0, "price_deviation": 0.01}
+        ]
+        
+        response = client.put("/api/v1/config/symbols", json=valid_symbols)
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert "Failed to update symbols" in data["detail"]

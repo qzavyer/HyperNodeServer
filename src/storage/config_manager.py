@@ -3,8 +3,8 @@
 import json
 import aiofiles
 from pathlib import Path
-from typing import Dict, Any, Optional
-from src.storage.models import Config
+from typing import Dict, Any, Optional, List
+from src.storage.models import Config, SymbolConfig
 from src.utils.logger import get_logger
 from config.settings import settings
 
@@ -122,6 +122,34 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to update configuration: {e}")
             raise ConfigError(f"Configuration update failed: {e}")
+    
+    async def update_symbols_async(self, symbols: List[SymbolConfig]) -> Config:
+        """Update symbols configuration only.
+        
+        Args:
+            symbols: List of symbol configurations
+            
+        Returns:
+            Updated configuration
+            
+        Raises:
+            ConfigError: If update fails
+        """
+        try:
+            current_config = self.get_config()
+            
+            # Create updated configuration with new symbols
+            updated_config = current_config.model_copy(update={"symbols_config": symbols})
+            
+            # Save updated configuration
+            await self.save_config_async(updated_config)
+            
+            logger.info(f"Updated symbols configuration with {len(symbols)} symbols")
+            return updated_config
+            
+        except Exception as e:
+            logger.error(f"Failed to update symbols configuration: {e}")
+            raise ConfigError(f"Symbols configuration update failed: {e}")
     
     def _create_default_config(self) -> Config:
         """Create default configuration from settings.
