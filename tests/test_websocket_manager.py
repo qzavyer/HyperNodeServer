@@ -78,7 +78,10 @@ class TestWebSocketManager:
         """Test connecting to valid channel."""
         await websocket_manager.connect(mock_websocket, "orderUpdate")
         
-        mock_websocket.accept.assert_called_once()
+        # accept() should NOT be called by WebSocketManager (handled in routes)
+        mock_websocket.accept.assert_not_called()
+        # But send_text should be called for welcome message
+        mock_websocket.send_text.assert_called_once()
         assert mock_websocket in websocket_manager.active_connections["orderUpdate"]
         assert len(websocket_manager.active_connections["orderUpdate"]) == 1
     

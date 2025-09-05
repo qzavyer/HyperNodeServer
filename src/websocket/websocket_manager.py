@@ -47,11 +47,14 @@ class WebSocketManager:
         logger.info("WebSocket manager stopped")
 
     async def connect(self, websocket: WebSocket, channel: str):
-        """Connect a WebSocket to a specific channel."""
+        """Connect a WebSocket to a specific channel.
+        
+        Note: websocket.accept() should be called before this method.
+        """
         if channel not in self.active_connections:
             raise ValueError(f"Unknown channel: {channel}")
 
-        await websocket.accept()
+        # WebSocket уже должен быть принят в роуте
         self.active_connections[channel].add(websocket)
         logger.info(f"WebSocket connected to channel: {channel}")
 
