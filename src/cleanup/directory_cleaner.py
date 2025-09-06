@@ -74,9 +74,9 @@ class DirectoryCleaner:
                     continue
                 
                 # Работаем только с сегодняшней папкой
-                if dir_name == today_str:
-                    files_removed = await self._cleanup_today_directory_async(dir_path, one_hour_ago)
-                    removed_files += files_removed
+                # if dir_name == today_str:
+                #     files_removed = await self._cleanup_today_directory_async(dir_path, one_hour_ago)
+                #     removed_files += files_removed
             
             self.logger.info(f"✅ Очистка завершена: удалено {removed_dirs} директорий, {removed_files} файлов")
             return removed_dirs, removed_files
