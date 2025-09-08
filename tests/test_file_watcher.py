@@ -168,7 +168,7 @@ class TestLogFileHandler:
     
     @pytest.mark.asyncio
     async def test_on_created(self, mock_order_manager):
-        """Test file creation event handling."""
+        """Test file creation event handling for JSON files."""
         file_watcher = FileWatcher(mock_order_manager)
         file_watcher._schedule_file_processing = AsyncMock()
         handler = LogFileHandler(file_watcher)
@@ -176,6 +176,22 @@ class TestLogFileHandler:
         mock_event = Mock()
         mock_event.is_directory = False
         mock_event.src_path = "/test/file.json"
+        
+        # Mock asyncio.create_task
+        with patch('asyncio.create_task') as mock_create_task:
+            handler.on_created(mock_event)
+            mock_create_task.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_on_created_numeric_files(self, mock_order_manager):
+        """Test file creation event handling for numeric log files."""
+        file_watcher = FileWatcher(mock_order_manager)
+        file_watcher._schedule_file_processing = AsyncMock()
+        handler = LogFileHandler(file_watcher)
+        
+        mock_event = Mock()
+        mock_event.is_directory = False
+        mock_event.src_path = "/test/logs/10"
         
         # Mock asyncio.create_task
         with patch('asyncio.create_task') as mock_create_task:
@@ -207,6 +223,20 @@ class TestLogFileHandler:
         mock_event = Mock()
         mock_event.is_directory = True
         mock_event.src_path = "/test/directory"
+        
+        with patch('asyncio.create_task') as mock_create_task:
+            handler.on_created(mock_event)
+            mock_create_task.assert_not_called()
+    
+    def test_on_created_ignores_non_log_files(self, mock_order_manager):
+        """Test that non-log files are ignored."""
+        file_watcher = FileWatcher(mock_order_manager)
+        file_watcher._schedule_file_processing = AsyncMock()
+        handler = LogFileHandler(file_watcher)
+        
+        mock_event = Mock()
+        mock_event.is_directory = False
+        mock_event.src_path = "/test/readme.txt"
         
         with patch('asyncio.create_task') as mock_create_task:
             handler.on_created(mock_event)

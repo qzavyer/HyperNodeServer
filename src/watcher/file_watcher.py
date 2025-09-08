@@ -24,22 +24,32 @@ class LogFileHandler(FileSystemEventHandler):
     def on_modified(self, event):
         """Called when a file is modified."""
         logger.debug(f"File modified event: {event.src_path} (is_directory: {event.is_directory})")
-        if not event.is_directory and event.src_path.endswith('.json'):
-            logger.info(f"JSON file modified, scheduling processing: {event.src_path}")
-            # Запускаем обработку в фоне, не блокируя event loop
-            asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
+        if not event.is_directory:
+            # Проверяем что это файл лога (цифровые имена или .json)
+            file_name = Path(event.src_path).name
+            if file_name.isdigit() or file_name.endswith('.json'):
+                logger.info(f"Log file modified, scheduling processing: {event.src_path}")
+                # Запускаем обработку в фоне, не блокируя event loop
+                asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
+            else:
+                logger.debug(f"Ignoring non-log file: {event.src_path} (name: {file_name})")
         else:
-            logger.debug(f"Ignoring non-JSON file or directory: {event.src_path}")
+            logger.debug(f"Ignoring directory: {event.src_path}")
     
     def on_created(self, event):
         """Called when a new file is created."""
         logger.debug(f"File created event: {event.src_path} (is_directory: {event.is_directory})")
-        if not event.is_directory and event.src_path.endswith('.json'):
-            logger.info(f"JSON file created, scheduling processing: {event.src_path}")
-            # Запускаем обработку в фоне, не блокируя event loop
-            asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
+        if not event.is_directory:
+            # Проверяем что это файл лога (цифровые имена или .json)
+            file_name = Path(event.src_path).name
+            if file_name.isdigit() or file_name.endswith('.json'):
+                logger.info(f"Log file created, scheduling processing: {event.src_path}")
+                # Запускаем обработку в фоне, не блокируя event loop
+                asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
+            else:
+                logger.debug(f"Ignoring non-log file: {event.src_path} (name: {file_name})")
         else:
-            logger.debug(f"Ignoring non-JSON file or directory: {event.src_path}")
+            logger.debug(f"Ignoring directory: {event.src_path}")
 
 
 class FileWatcher:
@@ -237,29 +247,30 @@ class FileWatcher:
             if not hourly_path.exists():
                 logger.warning(f"Hourly directory not found: {hourly_path}")
                 # Fallback: проверяем основную директорию
-                base_json_files = list(self.logs_path.rglob("*.json"))
-                if base_json_files:
-                    logger.info(f"Found {len(base_json_files)} JSON files in base directory")
-                    latest_file = max(base_json_files, key=lambda f: f.stat().st_mtime)
+                base_log_files = list(self.logs_path.rglob("*"))
+                base_log_files = [f for f in base_log_files if f.is_file() and (f.name.isdigit() or f.name.endswith('.json'))]
+                if base_log_files:
+                    logger.info(f"Found {len(base_log_files)} log files in base directory")
+                    latest_file = max(base_log_files, key=lambda f: f.stat().st_mtime)
                     logger.info(f"Using latest file from base directory: {latest_file}")
                     return latest_file
                 else:
-                    logger.warning(f"No JSON files found in base directory either: {self.logs_path}")
+                    logger.warning(f"No log files found in base directory either: {self.logs_path}")
                 return None
             
-            # Ищем JSON файлы в поддиректориях
-            json_files = list(hourly_path.rglob("*.json"))
-            logger.info(f"Found {len(json_files)} JSON files in hourly directory")
+            # Ищем файлы логов в поддиректориях (цифровые имена или .json)
+            all_files = list(hourly_path.rglob("*"))
+            log_files = [f for f in all_files if f.is_file() and (f.name.isdigit() or f.name.endswith('.json'))]
+            logger.info(f"Found {len(log_files)} log files in hourly directory (numeric names or .json)")
             
-            if not json_files:
-                logger.warning(f"No JSON files found in {hourly_path}")
+            if not log_files:
+                logger.warning(f"No log files found in {hourly_path}")
                 # Показываем что есть в директории
-                all_files = list(hourly_path.rglob("*"))
                 logger.info(f"All files in hourly directory: {[str(f) for f in all_files[:10]]}")  # Показываем первые 10
                 return None
             
             # Sort by modification time, newest first
-            latest_file = max(json_files, key=lambda f: f.stat().st_mtime)
+            latest_file = max(log_files, key=lambda f: f.stat().st_mtime)
             logger.info(f"Found latest file: {latest_file} (size: {latest_file.stat().st_size} bytes)")
             return latest_file
         except Exception as e:

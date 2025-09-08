@@ -186,21 +186,22 @@ async def debug_filewatcher() -> Dict[str, Any]:
         logs_path = file_watcher.logs_path
         hourly_path = logs_path / "node_order_statuses" / "hourly"
         
-        # Count files
-        json_files = []
+        # Count log files (numeric names or .json)
+        log_files = []
         total_size = 0
         if hourly_path.exists():
-            json_files = list(hourly_path.rglob("*.json"))
-            total_size = sum(f.stat().st_size for f in json_files)
+            all_files = list(hourly_path.rglob("*"))
+            log_files = [f for f in all_files if f.is_file() and (f.name.isdigit() or f.name.endswith('.json'))]
+            total_size = sum(f.stat().st_size for f in log_files)
         
         diagnostics = {
             "logs_path": str(logs_path),
             "logs_path_exists": logs_path.exists(),
             "hourly_path": str(hourly_path),
             "hourly_path_exists": hourly_path.exists(),
-            "json_files_count": len(json_files),
+            "log_files_count": len(log_files),
             "total_size_mb": round(total_size / (1024*1024), 2),
-            "latest_files": [str(f) for f in json_files[-5:]] if json_files else [],
+            "latest_files": [str(f) for f in log_files[-5:]] if log_files else [],
             "directory_contents": [],
         }
         
