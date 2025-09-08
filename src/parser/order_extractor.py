@@ -62,7 +62,7 @@ class OrderExtractor:
                 symbol=order_data.get("coin"),
                 side=side,
                 price=float(order_data.get("limitPx", 0)),
-                size=float(order_data.get("sz", 0)),
+                size=float(order_data.get("origSz", 0)),
                 owner=log_entry.get("user"),
                 timestamp=datetime.fromisoformat(log_entry.get("time")),
                 status=status

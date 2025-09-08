@@ -81,11 +81,11 @@ class TestIntegration:
     def create_test_log_file(self):
         """Create test log file with sample data."""
         test_data = [
-            '{"time":"2025-09-02T08:26:36.877863946","user":"0x1234567890abcdef","status":"open","order":{"coin":"BTC","side":"B","limitPx":"50000","sz":"1.0","oid":123}}',
-            '{"time":"2025-09-02T08:26:36.877863946","user":"0xfedcba0987654321","status":"open","order":{"coin":"ETH","side":"A","limitPx":"3000","sz":"10.0","oid":456}}',
-            '{"time":"2025-09-02T08:26:36.877863946","user":"0xabcdef1234567890","status":"open","order":{"coin":"BTC","side":"B","limitPx":"49000","sz":"0.5","oid":789}}',
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0x1234567890abcdef","status":"open","order":{"coin":"BTC","side":"B","limitPx":"50000","origSz":"1.0","oid":123}}',
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0xfedcba0987654321","status":"open","order":{"coin":"ETH","side":"A","limitPx":"3000","origSz":"10.0","oid":456}}',
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0xabcdef1234567890","status":"open","order":{"coin":"BTC","side":"B","limitPx":"49000","origSz":"0.5","oid":789}}',
             'invalid json line',
-            '{"time":"2025-09-02T08:26:36.877863946","user":"0x1111111111111111","status":"open","order":{"coin":"SOL","side":"A","limitPx":"100","sz":"100.0","oid":999}}'
+            '{"time":"2025-09-02T08:26:36.877863946","user":"0x1111111111111111","status":"open","order":{"coin":"SOL","side":"A","limitPx":"100","origSz":"100.0","oid":999}}'
         ]
         
         with open(self.test_log_file, 'w') as f:
@@ -407,7 +407,7 @@ class TestIntegration:
             "coin": "BTC",
             "side": "InvalidSide",  # Invalid side
             "px": "-50000",  # Negative price
-            "sz": "0",  # Zero size
+            "origSz": "0",  # Zero size
             "time": 1640995200000
         }
         

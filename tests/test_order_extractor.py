@@ -21,7 +21,7 @@ class TestOrderExtractor:
                 "coin": "BTC",
                 "side": "B",
                 "limitPx": "50000",
-                "sz": "1.0",
+                "origSz": "1.0",
                 "oid": 123
             }
         }
@@ -50,7 +50,7 @@ class TestOrderExtractor:
                 "coin": "ETH",
                 "side": "A",
                 "limitPx": "3000",
-                "sz": "10.0",
+                "origSz": "10.0",
                 "oid": 456
             }
         }
@@ -74,7 +74,7 @@ class TestOrderExtractor:
                 "coin": "HYPE",
                 "side": "B",
                 "limitPx": "44.663",
-                "sz": "223.03",
+                "origSz": "223.03",
                 "oid": 789
             }
         }
@@ -98,7 +98,7 @@ class TestOrderExtractor:
                 "coin": "BTC",
                 "side": "X",  # Неверная сторона
                 "limitPx": "50000",
-                "sz": "1.0",
+                "origSz": "1.0",
                 "oid": 123
             }
         }
@@ -120,7 +120,7 @@ class TestOrderExtractor:
                 "coin": "BTC",
                 # Отсутствует side
                 "limitPx": "50000",
-                "sz": "1.0",
+                "origSz": "1.0",
                 "oid": 123
             }
         }
@@ -142,7 +142,7 @@ class TestOrderExtractor:
                 "coin": "BTC",
                 "side": "B",
                 "limitPx": "50000",
-                "sz": "1.0",
+                "origSz": "1.0",
                 "oid": 123
             }
         }
@@ -180,7 +180,7 @@ class TestOrderExtractor:
                     "coin": "BTC",
                     "side": "B",
                     "limitPx": "50000",
-                    "sz": "1.0",
+                    "origSz": "1.0",
                     "oid": 123
                 }
             }
