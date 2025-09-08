@@ -84,6 +84,10 @@ class FileWatcher:
         cleanup_task = asyncio.create_task(self._cleanup_loop_async())
         logger.info("✅ Cleanup loop task created")
         
+        # Start periodic scanner for active files (to catch changes missed by watchdog)
+        scanner_task = asyncio.create_task(self._periodic_scanner())
+        logger.info("✅ Periodic scanner task created")
+        
         # Start file system monitoring for node_order_statuses/hourly/
         hourly_path = self.logs_path / "node_order_statuses" / "hourly"
         if hourly_path.exists():
@@ -276,6 +280,36 @@ class FileWatcher:
         except Exception as e:
             logger.error(f"Error finding latest file: {e}")
             return None
+    
+    async def _periodic_scanner(self) -> None:
+        """Periodically scans for file changes that watchdog might miss."""
+        logger.info("Periodic scanner started")
+        last_scan_sizes = {}  # file_path -> size
+        
+        while self.is_running:
+            try:
+                await asyncio.sleep(5)  # Scan every 30 seconds
+                
+                # Find current hour file
+                current_file = self._find_latest_file()
+                if current_file and current_file.exists():
+                    current_size = current_file.stat().st_size
+                    
+                    # Check if file has grown since last scan
+                    if str(current_file) not in last_scan_sizes:
+                        last_scan_sizes[str(current_file)] = current_size
+                        logger.info(f"Periodic scanner: New file detected {current_file} ({current_size} bytes)")
+                        await self._schedule_file_processing(current_file)
+                    elif current_size > last_scan_sizes[str(current_file)]:
+                        last_scan_sizes[str(current_file)] = current_size
+                        logger.info(f"Periodic scanner: File grew {current_file} ({current_size} bytes)")
+                        await self._schedule_file_processing(current_file)
+                    else:
+                        logger.debug(f"Periodic scanner: No changes in {current_file}")
+                        
+            except Exception as e:
+                logger.error(f"Error in periodic scanner: {e}")
+                await asyncio.sleep(30)  # Wait before retrying
     
     async def _cleanup_loop_async(self) -> None:
         """Periodic cleanup loop."""
