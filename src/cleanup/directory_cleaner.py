@@ -74,6 +74,7 @@ class DirectoryCleaner:
                     continue
                 
                 # Работаем только с сегодняшней папкой
+                # НЕ ТРОГАЕМ сегодняшние файлы - нода может упасть!
                 # if dir_name == today_str:
                 #     files_removed = await self._cleanup_today_directory_async(dir_path, one_hour_ago)
                 #     removed_files += files_removed

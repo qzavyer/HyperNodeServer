@@ -23,15 +23,23 @@ class LogFileHandler(FileSystemEventHandler):
     
     def on_modified(self, event):
         """Called when a file is modified."""
+        logger.debug(f"File modified event: {event.src_path} (is_directory: {event.is_directory})")
         if not event.is_directory and event.src_path.endswith('.json'):
+            logger.info(f"JSON file modified, scheduling processing: {event.src_path}")
             # Запускаем обработку в фоне, не блокируя event loop
             asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
+        else:
+            logger.debug(f"Ignoring non-JSON file or directory: {event.src_path}")
     
     def on_created(self, event):
         """Called when a new file is created."""
+        logger.debug(f"File created event: {event.src_path} (is_directory: {event.is_directory})")
         if not event.is_directory and event.src_path.endswith('.json'):
+            logger.info(f"JSON file created, scheduling processing: {event.src_path}")
             # Запускаем обработку в фоне, не блокируя event loop
             asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
+        else:
+            logger.debug(f"Ignoring non-JSON file or directory: {event.src_path}")
 
 
 class FileWatcher:
@@ -55,13 +63,16 @@ class FileWatcher:
         self.logs_path.mkdir(parents=True, exist_ok=True)
         
         # Schedule initial scan of latest file
-        asyncio.create_task(self.scan_latest_file_async())
+        scan_task = asyncio.create_task(self.scan_latest_file_async())
+        logger.info("✅ Initial file scan task created")
         
         # Start background file processor
-        asyncio.create_task(self._background_file_processor())
+        processor_task = asyncio.create_task(self._background_file_processor())
+        logger.info("✅ Background file processor task created")
         
         # Schedule periodic cleanup
-        asyncio.create_task(self._cleanup_loop_async())
+        cleanup_task = asyncio.create_task(self._cleanup_loop_async())
+        logger.info("✅ Cleanup loop task created")
         
         # Start file system monitoring for node_order_statuses/hourly/
         hourly_path = self.logs_path / "node_order_statuses" / "hourly"
@@ -89,13 +100,26 @@ class FileWatcher:
     async def scan_latest_file_async(self) -> None:
         """Scans only the latest file on startup."""
         try:
+            logger.info(f"Starting initial scan of logs directory: {self.logs_path}")
             latest_file = self._find_latest_file()
             if latest_file:
                 logger.info(f"Scanning latest file: {latest_file}")
                 await self._schedule_file_processing(latest_file)
             else:
-                logger.debug(f"No log files found for initial scan\n{self.logs_path}")
-                logger.info(f"No log files found for initial scan")
+                logger.warning(f"No log files found for initial scan in {self.logs_path}")
+                # Дополнительная диагностика
+                try:
+                    if self.logs_path.exists():
+                        logger.info(f"Directory exists, contents: {list(self.logs_path.iterdir())}")
+                        hourly_path = self.logs_path / "node_order_statuses" / "hourly"
+                        if hourly_path.exists():
+                            logger.info(f"Hourly directory exists, contents: {list(hourly_path.rglob('*'))}")
+                        else:
+                            logger.warning(f"Hourly directory does not exist: {hourly_path}")
+                    else:
+                        logger.warning(f"Logs directory does not exist: {self.logs_path}")
+                except Exception as scan_ex:
+                    logger.error(f"Error during directory scan: {scan_ex}")
         except Exception as e:
             logger.error(f"Error during initial file scan: {e}")
     
@@ -127,6 +151,9 @@ class FileWatcher:
         """Background processor that handles files without blocking API."""
         logger.info("Background file processor started")
         
+        # Добавляем счетчик для отладки
+        timeout_count = 0
+        
         while self.is_running:
             try:
                 # Ждем файл для обработки (неблокирующе)
@@ -135,8 +162,15 @@ class FileWatcher:
                         self.pending_files.get(), 
                         timeout=1.0
                     )
+                    timeout_count = 0  # Сбрасываем счетчик если получили файл
+                    logger.info(f"Background processor received file: {file_path}")
+                    
                 except asyncio.TimeoutError:
                     # Таймаут - проверяем, нужно ли продолжать работу
+                    timeout_count += 1
+                    if timeout_count % 30 == 0:  # Логируем каждые 30 секунд
+                        logger.debug(f"Background processor waiting for files... (timeout count: {timeout_count})")
+                        logger.debug(f"Queue size: {self.pending_files.qsize()}, Processing files: {len(self.processing_files)}")
                     continue
                 
                 # Обрабатываем файл в фоне
@@ -145,6 +179,8 @@ class FileWatcher:
             except Exception as e:
                 logger.error(f"Error in background file processor: {e}")
                 await asyncio.sleep(1)  # Пауза перед следующей попыткой
+        
+        logger.info("Background file processor stopped")
     
     async def _process_file_background(self, file_path: Path) -> None:
         """Processes a single log file in background without blocking API."""
@@ -196,20 +232,35 @@ class FileWatcher:
         try:
             # Ищем файлы в поддиректориях node_order_statuses/hourly/
             hourly_path = self.logs_path / "node_order_statuses" / "hourly"
+            logger.info(f"Looking for files in: {hourly_path}")
             
             if not hourly_path.exists():
-                logger.debug(f"Hourly directory not found: {hourly_path}")
+                logger.warning(f"Hourly directory not found: {hourly_path}")
+                # Fallback: проверяем основную директорию
+                base_json_files = list(self.logs_path.rglob("*.json"))
+                if base_json_files:
+                    logger.info(f"Found {len(base_json_files)} JSON files in base directory")
+                    latest_file = max(base_json_files, key=lambda f: f.stat().st_mtime)
+                    logger.info(f"Using latest file from base directory: {latest_file}")
+                    return latest_file
+                else:
+                    logger.warning(f"No JSON files found in base directory either: {self.logs_path}")
                 return None
             
             # Ищем JSON файлы в поддиректориях
             json_files = list(hourly_path.rglob("*.json"))
+            logger.info(f"Found {len(json_files)} JSON files in hourly directory")
+            
             if not json_files:
-                logger.debug(f"No JSON files found in {hourly_path}")
+                logger.warning(f"No JSON files found in {hourly_path}")
+                # Показываем что есть в директории
+                all_files = list(hourly_path.rglob("*"))
+                logger.info(f"All files in hourly directory: {[str(f) for f in all_files[:10]]}")  # Показываем первые 10
                 return None
             
             # Sort by modification time, newest first
             latest_file = max(json_files, key=lambda f: f.stat().st_mtime)
-            logger.debug(f"Found latest file: {latest_file}")
+            logger.info(f"Found latest file: {latest_file} (size: {latest_file.stat().st_size} bytes)")
             return latest_file
         except Exception as e:
             logger.error(f"Error finding latest file: {e}")

@@ -69,7 +69,7 @@ class TestDirectoryCleaner:
     
     @pytest.mark.asyncio
     async def test_cleanup_async_today_directory_old_files(self):
-        """Test cleanup removes old files from today's directory."""
+        """Test cleanup DOES NOT remove files from today's directory (to avoid crashing the node)."""
         # Create today's directory
         today = datetime.now().strftime("%Y%m%d")
         today_dir = Path(self.temp_dir) / today
@@ -95,8 +95,8 @@ class TestDirectoryCleaner:
             removed_dirs, removed_files = await self.cleaner.cleanup_async()
         
         assert removed_dirs == 0
-        assert removed_files == 1
-        assert not old_file.exists()
+        assert removed_files == 0  # Files in today's directory should NOT be removed
+        assert old_file.exists()  # File should still exist
     
     @pytest.mark.asyncio
     async def test_cleanup_async_today_directory_recent_files(self):
@@ -269,7 +269,7 @@ class TestDirectoryCleaner:
     
     @pytest.mark.asyncio
     async def test_cleanup_async_with_subdirectories(self):
-        """Test cleanup with nested directory structure."""
+        """Test cleanup with nested directory structure (files in today's directory are preserved)."""
         # Create today's directory with subdirectories
         today = datetime.now().strftime("%Y%m%d")
         today_dir = Path(self.temp_dir) / today
@@ -303,8 +303,8 @@ class TestDirectoryCleaner:
             removed_dirs, removed_files = await self.cleaner.cleanup_async()
         
         assert removed_dirs == 0
-        assert removed_files == 1
-        assert not old_file.exists()
+        assert removed_files == 0  # Files in today's directory should NOT be removed
+        assert old_file.exists()  # Both files should still exist
         assert recent_file.exists()
     
     @pytest.mark.asyncio

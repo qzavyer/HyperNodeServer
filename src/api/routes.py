@@ -167,3 +167,59 @@ async def update_symbols_async(
         return await manager.update_symbols_async(symbols)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update symbols: {str(e)}")
+
+@router.get("/debug/filewatcher")
+async def debug_filewatcher() -> Dict[str, Any]:
+    """Debug endpoint for FileWatcher status and diagnostics."""
+    try:
+        # Import here to avoid circular imports
+        import src.main
+        
+        file_watcher = src.main.file_watcher
+        if file_watcher is None:
+            raise HTTPException(status_code=500, detail="FileWatcher not initialized")
+        
+        # Get basic status
+        status = file_watcher.get_processing_status()
+        
+        # Get detailed diagnostics
+        logs_path = file_watcher.logs_path
+        hourly_path = logs_path / "node_order_statuses" / "hourly"
+        
+        # Count files
+        json_files = []
+        total_size = 0
+        if hourly_path.exists():
+            json_files = list(hourly_path.rglob("*.json"))
+            total_size = sum(f.stat().st_size for f in json_files)
+        
+        diagnostics = {
+            "logs_path": str(logs_path),
+            "logs_path_exists": logs_path.exists(),
+            "hourly_path": str(hourly_path),
+            "hourly_path_exists": hourly_path.exists(),
+            "json_files_count": len(json_files),
+            "total_size_mb": round(total_size / (1024*1024), 2),
+            "latest_files": [str(f) for f in json_files[-5:]] if json_files else [],
+            "directory_contents": [],
+        }
+        
+        # Add directory listing if exists
+        if logs_path.exists():
+            try:
+                diagnostics["directory_contents"] = [str(p) for p in logs_path.iterdir()][:10]
+            except Exception as e:
+                diagnostics["directory_error"] = str(e)
+        
+        return {
+            "status": status,
+            "diagnostics": diagnostics,
+            "settings": {
+                "max_file_size_gb": src.main.settings.MAX_FILE_SIZE_GB,
+                "batch_size": src.main.settings.BATCH_SIZE,
+                "chunk_size": src.main.settings.CHUNK_SIZE_BYTES,
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")

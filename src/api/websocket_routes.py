@@ -15,6 +15,15 @@ def set_websocket_manager(manager: WebSocketManager):
     global websocket_manager
     websocket_manager = manager
 
+@router.websocket("/")
+async def websocket_root(websocket: WebSocket):
+    """Root WebSocket endpoint - redirects to orderUpdate."""
+    logger.info("=== WebSocket Root Connection (redirecting to orderUpdate) ===")
+    logger.info(f"Client IP: {websocket.client.host}")
+    
+    # Перенаправляем на orderUpdate обработчик
+    await websocket_order_update(websocket)
+
 @router.websocket("/orderUpdate")
 async def websocket_order_update(websocket: WebSocket):
     """WebSocket endpoint for real-time order updates."""
