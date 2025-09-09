@@ -2,17 +2,17 @@ name: CD - Deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master, develop ]
   workflow_run:
     workflows: ["CI - Tests"]
     types:
       - completed
-    branches: [ main ]
+    branches: [ main, master, develop ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event.workflow_run.conclusion == 'success'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.event.workflow_run.conclusion == 'success'
     
     steps:
     - name: Checkout code
@@ -59,7 +59,7 @@ jobs:
         
   notify:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
     
     steps:
     - name: Notify deployment ready
