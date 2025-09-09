@@ -2,7 +2,7 @@
 
 import asyncio
 from typing import Set, Dict, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.storage.models import Order
@@ -116,17 +116,32 @@ class HybridManager:
             base_path = Path(self.file_watcher.node_logs_path) / "node_order_statuses/hourly"
             
             # Look for current hour file pattern (like 20250909/8)
-            current_date = datetime.now().strftime("%Y%m%d")
-            current_hour = datetime.now().hour
+            # Use UTC time as logs are typically in UTC
+            utc_now = datetime.now(timezone.utc)
+            current_date = utc_now.strftime("%Y%m%d")
+            current_hour = utc_now.hour
             
             date_dir = base_path / current_date
+            self.logger.debug(f"Looking for date dir: {date_dir}")
+            
             if date_dir.exists():
                 current_file = date_dir / str(current_hour)
+                self.logger.debug(f"Looking for current hour file: {current_file}")
                 if current_file.exists():
+                    self.logger.info(f"Found current active file: {current_file}")
                     return str(current_file)
+                else:
+                    self.logger.warning(f"Current hour file not found: {current_file}")
+            else:
+                self.logger.warning(f"Date directory not found: {date_dir}")
                     
             # Fallback: find the latest file
+            self.logger.info("Falling back to latest file search")
             latest_file = self._find_latest_file(base_path)
+            if latest_file:
+                self.logger.info(f"Found latest file: {latest_file}")
+            else:
+                self.logger.error("No files found in fallback search")
             return latest_file
             
         except Exception as e:
