@@ -113,7 +113,7 @@ class HybridManager:
         """Get the path to the currently active log file."""
         try:
             # Use the same logic as FileWatcher to find current file
-            base_path = Path(self.file_watcher.node_logs_path) / "node_order_statuses/hourly"
+            base_path = Path(self.file_watcher.logs_path) / "node_order_statuses/hourly"
             
             # Look for current hour file pattern (like 20250909/8)
             # Use UTC time as logs are typically in UTC
