@@ -14,6 +14,7 @@ from src.storage.file_storage import FileStorage
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.watcher.file_watcher import FileWatcher
+from src.watcher.hybrid_manager import HybridManager
 from src.websocket.websocket_manager import WebSocketManager
 from src.notifications.order_notifier import OrderNotifier
 from src.cleanup.directory_cleaner import DirectoryCleaner
@@ -111,6 +112,7 @@ websocket_manager = WebSocketManager()
 order_notifier = OrderNotifier(websocket_manager, config_manager)
 order_manager = OrderManager(file_storage, config_manager, order_notifier)
 file_watcher = FileWatcher(order_manager)
+hybrid_manager = HybridManager(file_watcher, order_manager)
 directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH)
 
 # Set WebSocket manager in routes
@@ -133,8 +135,8 @@ async def startup_event():
         logger.info("✅ Application started successfully")
         logger.info(f"📊 Loaded {order_manager.get_order_count()} orders")
         
-        # Start file watcher
-        await file_watcher.start_async()
+        # Start hybrid manager (includes both legacy and realtime watchers)
+        await hybrid_manager.start_async()
         
         # Start directory cleaner
         asyncio.create_task(directory_cleaner.start_periodic_cleanup_async())
@@ -148,8 +150,8 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on application shutdown."""
     try:
-        # Stop file watcher
-        await file_watcher.stop_async()
+        # Stop hybrid manager
+        await hybrid_manager.stop_async()
         
         # Stop WebSocket manager
         await websocket_manager.stop()
@@ -185,8 +187,7 @@ async def health_check():
 async def performance_info():
     """Performance information endpoint."""
     return {
-        "file_watcher_running": file_watcher.is_running,
-        "background_processing": file_watcher.get_processing_status(),
+        "hybrid_manager_stats": hybrid_manager.get_stats(),
         "websocket_status": websocket_manager.get_connection_stats(),
         "notifications": order_notifier.get_notification_stats(),
         "memory_usage": {
@@ -200,4 +201,35 @@ async def performance_info():
             "batch_size": settings.BATCH_SIZE
         },
         "directory_cleanup": directory_cleaner.get_cleanup_stats()
+    }
+
+@app.get("/metrics/realtime")
+async def realtime_metrics():
+    """Real-time processing metrics for Iteration 1."""
+    stats = hybrid_manager.get_stats()
+    return {
+        "iteration": "1 - Real-time Tail Reader",
+        "processing_streams": {
+            "realtime": {
+                "enabled": stats["realtime_enabled"],
+                "orders_processed": stats["realtime_orders_processed"],
+                "watcher_stats": stats["realtime_watcher_stats"]
+            },
+            "legacy": {
+                "enabled": stats["legacy_enabled"], 
+                "orders_processed": stats["legacy_orders_processed"],
+                "watcher_stats": stats["file_watcher_stats"]
+            }
+        },
+        "deduplication": {
+            "cache_size": stats["dedup_cache_size"],
+            "duplicates_filtered": stats["duplicate_orders_filtered"],
+            "efficiency": round(
+                (stats["duplicate_orders_filtered"] / max(stats["total_orders_processed"], 1)) * 100, 2
+            )
+        },
+        "total_processing": {
+            "orders_processed": stats["total_orders_processed"],
+            "running": stats["running"]
+        }
     }

@@ -29,8 +29,8 @@ def setup_logger(
     Returns:
         Configured logger instance
     """
-    # Return cached logger if already exists
-    if name in _loggers:
+    # Return cached logger if already exists and has handlers
+    if name in _loggers and _loggers[name].handlers:
         return _loggers[name]
     
     # Create logs directory (use absolute path for Docker consistency)
