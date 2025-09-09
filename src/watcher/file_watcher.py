@@ -29,8 +29,8 @@ class LogFileHandler(FileSystemEventHandler):
             file_name = Path(event.src_path).name
             if file_name.isdigit() or file_name.endswith('.json'):
                 logger.info(f"Log file modified, scheduling processing: {event.src_path}")
-                # Запускаем обработку в фоне, не блокируя event loop
-                asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
+                # Планируем обработку через thread-safe метод
+                self.file_watcher._schedule_file_processing_threadsafe(Path(event.src_path))
             else:
                 logger.debug(f"Ignoring non-log file: {event.src_path} (name: {file_name})")
         else:
@@ -44,8 +44,8 @@ class LogFileHandler(FileSystemEventHandler):
             file_name = Path(event.src_path).name
             if file_name.isdigit() or file_name.endswith('.json'):
                 logger.info(f"Log file created, scheduling processing: {event.src_path}")
-                # Запускаем обработку в фоне, не блокируя event loop
-                asyncio.create_task(self.file_watcher._schedule_file_processing(Path(event.src_path)))
+                # Планируем обработку через thread-safe метод
+                self.file_watcher._schedule_file_processing_threadsafe(Path(event.src_path))
             else:
                 logger.debug(f"Ignoring non-log file: {event.src_path} (name: {file_name})")
         else:
@@ -280,6 +280,27 @@ class FileWatcher:
         except Exception as e:
             logger.error(f"Error finding latest file: {e}")
             return None
+    
+    def _schedule_file_processing_threadsafe(self, file_path: Path) -> None:
+        """Thread-safe method to schedule file processing from watchdog events."""
+        try:
+            # Получаем event loop из основного потока, если он существует
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Планируем задачу в event loop основного потока
+                asyncio.run_coroutine_threadsafe(self._add_file_to_queue(file_path), loop)
+            else:
+                logger.warning(f"No running event loop found, cannot schedule processing for {file_path}")
+        except RuntimeError:
+            logger.warning(f"Cannot schedule file processing for {file_path} - no event loop available")
+    
+    async def _add_file_to_queue(self, file_path: Path) -> None:
+        """Adds file to processing queue."""
+        try:
+            await self.pending_files.put(file_path)
+            logger.debug(f"Added {file_path} to processing queue")
+        except Exception as e:
+            logger.error(f"Error adding file to queue: {e}")
     
     async def _periodic_scanner(self) -> None:
         """Periodically scans for file changes that watchdog might miss."""

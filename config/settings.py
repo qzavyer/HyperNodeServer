@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     BATCH_SIZE: int = 1000  # Orders processing batch size
     PROCESSING_TIMEOUT_PER_GB: int = 5  # Seconds per GB for file processing
     
+    # WebSocket settings
+    WEBSOCKET_PING_INTERVAL: int = 20  # Ping interval in seconds
+    WEBSOCKET_PING_TIMEOUT: int = 20   # Ping timeout in seconds
+    WEBSOCKET_CLOSE_TIMEOUT: int = 10  # Close timeout in seconds
+    
     # API settings
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000

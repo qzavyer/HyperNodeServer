@@ -115,37 +115,69 @@ class HybridManager:
             # Use the same logic as FileWatcher to find current file
             base_path = Path(self.file_watcher.logs_path) / "node_order_statuses/hourly"
             
-            # Look for current hour file pattern (like 20250909/8)
             # Use UTC time as logs are typically in UTC
             utc_now = datetime.now(timezone.utc)
             current_date = utc_now.strftime("%Y%m%d")
-            current_hour = utc_now.hour
             
             date_dir = base_path / current_date
             self.logger.debug(f"Looking for date dir: {date_dir}")
             
             if date_dir.exists():
-                current_file = date_dir / str(current_hour)
-                self.logger.debug(f"Looking for current hour file: {current_file}")
-                if current_file.exists():
-                    self.logger.info(f"Found current active file: {current_file}")
-                    return str(current_file)
+                # Instead of looking for current hour, find the latest file in today's directory
+                latest_today = self._find_latest_file_in_directory(date_dir)
+                if latest_today:
+                    self.logger.info(f"Found latest file for today: {latest_today}")
+                    return latest_today
                 else:
-                    self.logger.warning(f"Current hour file not found: {current_file}")
+                    self.logger.warning(f"No files found in today's directory: {date_dir}")
             else:
                 self.logger.warning(f"Date directory not found: {date_dir}")
                     
-            # Fallback: find the latest file
-            self.logger.info("Falling back to latest file search")
+            # Fallback: find the latest file across all directories
+            self.logger.info("Falling back to global latest file search")
             latest_file = self._find_latest_file(base_path)
             if latest_file:
-                self.logger.info(f"Found latest file: {latest_file}")
+                self.logger.info(f"Found latest file globally: {latest_file}")
             else:
                 self.logger.error("No files found in fallback search")
             return latest_file
             
         except Exception as e:
             self.logger.error(f"Error finding current active file: {e}")
+            return None
+            
+    def _find_latest_file_in_directory(self, date_dir: Path) -> Optional[str]:
+        """Find the latest log file in a specific date directory."""
+        try:
+            latest_time = datetime.min
+            latest_file = None
+            
+            self.logger.debug(f"Scanning directory {date_dir} for files")
+            files_found = []
+            
+            for hour_file in date_dir.iterdir():
+                if hour_file.is_file() and hour_file.name.isdigit():
+                    file_time = hour_file.stat().st_mtime
+                    file_datetime = datetime.fromtimestamp(file_time)
+                    file_size = hour_file.stat().st_size
+                    
+                    files_found.append((hour_file.name, file_datetime, file_size))
+                    
+                    if file_datetime > latest_time:
+                        latest_time = file_datetime
+                        latest_file = str(hour_file)
+            
+            # Log all found files for debugging
+            if files_found:
+                self.logger.debug(f"Files found in {date_dir}: {files_found}")
+                self.logger.info(f"Selected latest file: {latest_file} (modified: {latest_time})")
+            else:
+                self.logger.warning(f"No valid hour files found in {date_dir}")
+                        
+            return latest_file
+            
+        except Exception as e:
+            self.logger.error(f"Error finding latest file in directory {date_dir}: {e}")
             return None
             
     def _find_latest_file(self, base_path: Path) -> Optional[str]:

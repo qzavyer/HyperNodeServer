@@ -32,6 +32,8 @@ class OrderExtractor:
             # Нормализация статуса (обратная совместимость)
             if status == "cancelled":
                 status = "canceled"  # Приводим к единому формату
+            elif status == "vaultWithdrawalCanceled":
+                status = "canceled"  # Обрабатываем как обычный canceled
 
             not_created_statuses =  [
                 "badAloPxRejected",

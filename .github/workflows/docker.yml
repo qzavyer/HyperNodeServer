@@ -53,9 +53,11 @@ jobs:
         cache-to: type=gha,mode=max
         
     - name: Test Docker image
-      if: github.event_name == 'pull_request'
       run: |
-        docker run --rm -d --name test-container -p 8000:8000 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+        # Get the first built image tag from metadata
+        IMAGE_TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)
+        echo "Testing image: $IMAGE_TAG"
+        docker run --rm -d --name test-container -p 8000:8000 $IMAGE_TAG
         sleep 15
         curl -f http://localhost:8000/health || exit 1
         docker stop test-container

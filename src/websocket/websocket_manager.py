@@ -5,6 +5,7 @@ import json
 from typing import Dict, List, Set, Optional
 from datetime import datetime
 from fastapi import WebSocket, WebSocketDisconnect
+from websockets.exceptions import ConnectionClosedError
 from src.storage.models import Order
 from src.utils.logger import get_logger
 
@@ -92,9 +93,20 @@ class WebSocketManager:
             try:
                 await connection.send_text(message_text)
             except WebSocketDisconnect:
+                logger.debug(f"WebSocket connection disconnected during order update")
+                disconnected.add(connection)
+            except ConnectionClosedError:
+                logger.debug(f"WebSocket connection closed during order update")
+                disconnected.add(connection)
+            except asyncio.TimeoutError:
+                logger.warning(f"WebSocket send timeout during order update")
                 disconnected.add(connection)
             except Exception as e:
-                logger.error(f"Error sending order update: {e}")
+                # Специальная обработка для keepalive ping timeout
+                if "keepalive ping timeout" in str(e) or "1011" in str(e):
+                    logger.warning(f"WebSocket keepalive timeout, removing connection: {e}")
+                else:
+                    logger.error(f"Error sending order update: {e}")
                 disconnected.add(connection)
 
         # Удаляем отключенные соединения
@@ -151,9 +163,20 @@ class WebSocketManager:
             try:
                 await connection.send_text(message_text)
             except WebSocketDisconnect:
+                logger.debug(f"WebSocket connection disconnected during batch update")
+                disconnected.add(connection)
+            except ConnectionClosedError:
+                logger.debug(f"WebSocket connection closed during batch update")
+                disconnected.add(connection)
+            except asyncio.TimeoutError:
+                logger.warning(f"WebSocket send timeout during batch update")
                 disconnected.add(connection)
             except Exception as e:
-                logger.error(f"Error sending batch update: {e}")
+                # Специальная обработка для keepalive ping timeout
+                if "keepalive ping timeout" in str(e) or "1011" in str(e):
+                    logger.warning(f"WebSocket keepalive timeout, removing connection: {e}")
+                else:
+                    logger.error(f"Error sending batch update: {e}")
                 disconnected.add(connection)
 
         # Удаляем отключенные соединения
