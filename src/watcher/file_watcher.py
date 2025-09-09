@@ -64,10 +64,14 @@ class FileWatcher:
         self.is_running = False
         self.processing_files: set = set()  # Track files being processed
         self.pending_files: asyncio.Queue = asyncio.Queue()  # Queue for file processing
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # Reference to main event loop
         
     async def start_async(self) -> None:
         """Starts file monitoring with background processing."""
         logger.info(f"Starting file watcher for {self.logs_path}")
+        
+        # Сохраняем ссылку на текущий event loop для thread-safe операций
+        self._main_loop = asyncio.get_running_loop()
         
         # Ensure logs directory exists
         self.logs_path.mkdir(parents=True, exist_ok=True)
@@ -109,6 +113,10 @@ class FileWatcher:
         self.is_running = False
         self.observer.stop()
         self.observer.join()
+        
+        # Очищаем ссылку на event loop
+        self._main_loop = None
+        
         logger.info("File watcher stopped")
     
     async def scan_latest_file_async(self) -> None:
@@ -283,16 +291,15 @@ class FileWatcher:
     
     def _schedule_file_processing_threadsafe(self, file_path: Path) -> None:
         """Thread-safe method to schedule file processing from watchdog events."""
-        try:
-            # Получаем event loop из основного потока, если он существует
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Планируем задачу в event loop основного потока
-                asyncio.run_coroutine_threadsafe(self._add_file_to_queue(file_path), loop)
-            else:
-                logger.warning(f"No running event loop found, cannot schedule processing for {file_path}")
-        except RuntimeError:
-            logger.warning(f"Cannot schedule file processing for {file_path} - no event loop available")
+        if self._main_loop and not self._main_loop.is_closed():
+            try:
+                # Планируем задачу в сохраненный event loop основного потока
+                future = asyncio.run_coroutine_threadsafe(self._add_file_to_queue(file_path), self._main_loop)
+                logger.debug(f"Scheduled file processing: {file_path}")
+            except Exception as e:
+                logger.warning(f"Failed to schedule file processing for {file_path}: {e}")
+        else:
+            logger.warning(f"No main event loop available, cannot schedule processing for {file_path}")
     
     async def _add_file_to_queue(self, file_path: Path) -> None:
         """Adds file to processing queue."""
