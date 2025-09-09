@@ -31,12 +31,12 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p logs data config
 
-# Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser \
-    && chown -R appuser:appuser /app
+# Create hl user with fixed UID/GID for consistency with host
+RUN groupadd -g 1000 hl && useradd -u 1000 -g hl -m -d /home/hl hl \
+    && chown -R hl:hl /app
 
-# Switch to non-root user
-USER appuser
+# Switch to hl user
+USER hl
 
 # Expose port
 EXPOSE 8000
