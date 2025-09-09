@@ -33,9 +33,9 @@ def setup_logger(
     if name in _loggers:
         return _loggers[name]
     
-    # Create logs directory
-    logs_dir = Path("logs")
-    logs_dir.mkdir(exist_ok=True)
+    # Create logs directory (use absolute path for Docker consistency)
+    logs_dir = Path("/app/logs") if os.path.exists("/app") else Path("logs")
+    logs_dir.mkdir(exist_ok=True, parents=True)
     
     # Create logger
     logger = logging.getLogger(name)
@@ -50,9 +50,8 @@ def setup_logger(
         datefmt='%Y-%m-%dT%H:%M:%S'
     )
     
-    # Create rotating file handler with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_filename = f"app_{timestamp}.log"
+    # Create rotating file handler
+    log_filename = "app.log"
     log_filepath = logs_dir / log_filename
     
     try:
@@ -71,6 +70,12 @@ def setup_logger(
         
         # Log successful file handler setup
         print(f"✅ Logging to file: {log_filepath}")
+        
+        # Also add console handler for Docker logs visibility
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.INFO)  # Less verbose for console
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
         
     except Exception as e:
         # Fallback to stdout if file logging fails
@@ -102,7 +107,7 @@ def cleanup_old_logs(logs_dir: Path, retention_days: int) -> None:
     try:
         cutoff_time = datetime.now().timestamp() - (retention_days * 24 * 3600)
         
-        for log_file in logs_dir.glob("app_*.log*"):
+        for log_file in logs_dir.glob("app.log*"):
             if log_file.stat().st_mtime < cutoff_time:
                 log_file.unlink()
                 print(f"🗑️ Removed old log file: {log_file}")
