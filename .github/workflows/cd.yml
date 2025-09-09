@@ -7,6 +7,7 @@ on:
     workflows: ["CI - Tests"]
     types:
       - completed
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -38,14 +39,14 @@ jobs:
         cp Dockerfile deployment/
         
     - name: Deploy to staging (if configured)
-      if: env.STAGING_HOST != ''
+      if: vars.STAGING_HOST != ''
       run: |
         echo "Deploying to staging server..."
         # Add your staging deployment logic here
         # Example: rsync, scp, or SSH commands
         
     - name: Deploy to production (if configured)
-      if: env.PRODUCTION_HOST != ''
+      if: vars.PRODUCTION_HOST != ''
       run: |
         echo "Deploying to production server..."
         # Add your production deployment logic here
