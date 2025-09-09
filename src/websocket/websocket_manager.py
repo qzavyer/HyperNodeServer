@@ -42,7 +42,9 @@ class WebSocketManager:
 
         # Закрываем все соединения
         for channel in self.active_connections.values():
-            for connection in list(channel):
+            # Создаем копию для безопасной итерации
+            connections_copy = list(channel)
+            for connection in connections_copy:
                 await self.disconnect(connection)
 
         logger.info("WebSocket manager stopped")
@@ -68,10 +70,10 @@ class WebSocketManager:
 
     async def disconnect(self, websocket: WebSocket):
         """Disconnect a WebSocket from all channels."""
-        for channel in self.active_connections.values():
+        for channel_name, channel in self.active_connections.items():
             if websocket in channel:
                 channel.remove(websocket)
-                logger.info(f"WebSocket disconnected from channel: {channel}")
+                logger.info(f"WebSocket disconnected from channel: {channel_name}")
                 break
 
     async def broadcast_order_update(self, order: Order):
@@ -89,7 +91,9 @@ class WebSocketManager:
         message_text = json.dumps(message)
         disconnected = set()
 
-        for connection in self.active_connections["orderUpdate"]:
+        # Создаем копию множества для безопасной итерации
+        connections_copy = self.active_connections["orderUpdate"].copy()
+        for connection in connections_copy:
             try:
                 await connection.send_text(message_text)
             except WebSocketDisconnect:
@@ -159,7 +163,9 @@ class WebSocketManager:
         message_text = json.dumps(message)
         disconnected = set()
 
-        for connection in self.active_connections["orderBatch"]:
+        # Создаем копию множества для безопасной итерации
+        connections_copy = self.active_connections["orderBatch"].copy()
+        for connection in connections_copy:
             try:
                 await connection.send_text(message_text)
             except WebSocketDisconnect:
