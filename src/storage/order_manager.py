@@ -104,7 +104,7 @@ class OrderManager:
                 return
             
             # Log orders that passed filtering and are sent to WebSocket
-            self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price}")
+            self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price} time={order.timestamp}")
             
             order_id = order.id
             order_updated = False
@@ -162,7 +162,7 @@ class OrderManager:
             
             # Log all orders that passed filtering and are sent to WebSocket
             for order in filtered_orders:
-                self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price}")
+                self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price} time={order.timestamp}")
             
             # Group by order id
             grouped: Dict[str, List[Order]] = {}
