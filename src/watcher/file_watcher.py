@@ -97,10 +97,10 @@ class FileWatcher:
         if hourly_path.exists():
             self.observer.schedule(self.handler, str(hourly_path), recursive=True)
             logger.info(f"Monitoring directory: {hourly_path}")
-        else:
+        # else:
             # Fallback to monitoring base directory if hourly doesn't exist yet
-            self.observer.schedule(self.handler, str(self.logs_path), recursive=True)
-            logger.info(f"Monitoring base directory (hourly not found): {self.logs_path}")
+            # self.observer.schedule(self.handler, str(self.logs_path), recursive=True)
+            # logger.info(f"Monitoring base directory (hourly not found): {self.logs_path}")
         
         self.observer.start()
         self.is_running = True
