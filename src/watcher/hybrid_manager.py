@@ -92,7 +92,9 @@ class HybridManager:
             try:
                 # Get the current active file path
                 current_file = self._get_current_active_file()
+                self.logger.debug(f"Current active file check result: {current_file}")
                 if not current_file:
+                    self.logger.warning("No current active file found, waiting 5s before retry")
                     await asyncio.sleep(5)  # Wait before retry
                     continue
                     
@@ -121,6 +123,7 @@ class HybridManager:
             
             date_dir = base_path / current_date
             self.logger.debug(f"Looking for date dir: {date_dir}")
+            self.logger.debug(f"Current UTC time: {utc_now}, date: {current_date}")
             
             if date_dir.exists():
                 # Instead of looking for current hour, find the latest file in today's directory
@@ -162,10 +165,12 @@ class HybridManager:
                     file_size = hour_file.stat().st_size
                     
                     files_found.append((hour_file.name, file_datetime, file_size))
+                    self.logger.debug(f"Found file: {hour_file.name}, modified: {file_datetime}, size: {file_size}")
                     
                     if file_datetime > latest_time:
                         latest_time = file_datetime
                         latest_file = str(hour_file)
+                        self.logger.debug(f"New latest file: {latest_file}")
             
             # Log all found files for debugging
             if files_found:

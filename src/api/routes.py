@@ -224,3 +224,91 @@ async def debug_filewatcher() -> Dict[str, Any]:
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
+
+@router.post("/config/node-health")
+async def update_node_health_config(
+    config_data: Dict[str, Any],
+    manager: ConfigManager = Depends(get_config_manager)
+) -> Dict[str, Any]:
+    """Update node health monitoring configuration.
+    
+    Args:
+        config_data: Configuration data to update
+        manager: Config manager instance
+        
+    Returns:
+        Updated configuration
+    """
+    try:
+        # Validate required fields
+        required_fields = ["threshold_minutes", "check_interval_seconds"]
+        for field in required_fields:
+            if field not in config_data:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Missing required field: {field}"
+                )
+        
+        # Validate field types and ranges
+        threshold_minutes = config_data.get("threshold_minutes")
+        if not isinstance(threshold_minutes, int) or threshold_minutes < 1 or threshold_minutes > 60:
+            raise HTTPException(
+                status_code=400, 
+                detail="threshold_minutes must be an integer between 1 and 60"
+            )
+        
+        check_interval_seconds = config_data.get("check_interval_seconds")
+        if not isinstance(check_interval_seconds, int) or check_interval_seconds < 10 or check_interval_seconds > 300:
+            raise HTTPException(
+                status_code=400, 
+                detail="check_interval_seconds must be an integer between 10 and 300"
+            )
+        
+        # Get current config and update
+        config = manager.get_config()
+        config.node_health.threshold_minutes = threshold_minutes
+        config.node_health.check_interval_seconds = check_interval_seconds
+        
+        # Save updated config
+        await manager.save_config_async(config)
+        
+        return {
+            "success": True,
+            "message": "Node health configuration updated successfully",
+            "config": {
+                "threshold_minutes": config.node_health.threshold_minutes,
+                "check_interval_seconds": config.node_health.check_interval_seconds
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to update node health configuration: {str(e)}"
+        )
+
+@router.get("/config/node-health")
+async def get_node_health_config(
+    manager: ConfigManager = Depends(get_config_manager)
+) -> Dict[str, Any]:
+    """Get current node health monitoring configuration.
+    
+    Args:
+        manager: Config manager instance
+        
+    Returns:
+        Current configuration
+    """
+    try:
+        config = manager.get_config()
+        return {
+            "threshold_minutes": config.node_health.threshold_minutes,
+            "check_interval_seconds": config.node_health.check_interval_seconds
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to get node health configuration: {str(e)}"
+        )

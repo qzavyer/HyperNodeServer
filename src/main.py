@@ -10,6 +10,7 @@ import time
 
 from src.api.routes import router
 from src.api.websocket_routes import router as websocket_router, set_websocket_manager
+from src.api.health_routes import router as health_router
 from src.storage.file_storage import FileStorage
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
@@ -18,6 +19,7 @@ from src.watcher.hybrid_manager import HybridManager
 from src.websocket.websocket_manager import WebSocketManager
 from src.notifications.order_notifier import OrderNotifier
 from src.cleanup.directory_cleaner import DirectoryCleaner
+from src.monitoring.node_health_monitor import NodeHealthMonitor
 from src.utils.logger import setup_logger
 from config.settings import settings
 
@@ -104,6 +106,7 @@ app.add_middleware(
 # Include API routes
 app.include_router(router, prefix="/api/v1")
 app.include_router(websocket_router, prefix="/ws")
+app.include_router(health_router, prefix="/api/v1")
 
 # Global instances
 file_storage = FileStorage()
@@ -114,6 +117,7 @@ order_manager = OrderManager(file_storage, config_manager, order_notifier)
 file_watcher = FileWatcher(order_manager)
 hybrid_manager = HybridManager(file_watcher, order_manager)
 directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH)
+node_health_monitor = None  # Will be initialized in startup_event
 
 # Set WebSocket manager in routes
 set_websocket_manager(websocket_manager)
@@ -125,6 +129,15 @@ async def startup_event():
         # Initialize config manager
         await config_manager.load_config_async()
         logger.info("✅ Configuration loaded successfully")
+        
+        # Initialize node health monitor
+        config = config_manager.get_config()
+        global node_health_monitor
+        node_health_monitor = NodeHealthMonitor(
+            node_logs_path=config.node_logs_path,
+            threshold_minutes=config.node_health.threshold_minutes
+        )
+        logger.info("✅ Node health monitor initialized successfully")
         
         # Start WebSocket manager
         await websocket_manager.start()

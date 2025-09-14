@@ -34,6 +34,11 @@ class SymbolConfig(BaseModel):
     min_liquidity: float = Field(..., ge=0, description="Minimum liquidity required for this symbol")
     price_deviation: float = Field(..., ge=0, le=1, description="Maximum allowed price deviation (0.0-1.0)")
 
+class NodeHealthConfig(BaseModel):
+    """Configuration for node health monitoring."""
+    threshold_minutes: int = Field(5, ge=1, le=60, description="Threshold in minutes for determining unhealthy state")
+    check_interval_seconds: int = Field(30, ge=10, le=300, description="Interval between health checks in seconds")
+
 class Config(BaseModel):
     """Configuration model."""
     node_logs_path: str = Field(..., description="Path to node logs directory")
@@ -50,3 +55,4 @@ class Config(BaseModel):
     file_read_retry_attempts: int = Field(..., ge=1, le=10, description="File read retry attempts")
     file_read_retry_delay: float = Field(..., ge=0.1, le=10.0, description="File read retry delay in seconds")
     symbols_config: list[SymbolConfig] = Field(default_factory=list, description="Configuration for supported symbols")
+    node_health: NodeHealthConfig = Field(default_factory=NodeHealthConfig, description="Node health monitoring configuration")

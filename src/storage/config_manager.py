@@ -4,7 +4,7 @@ import json
 import aiofiles
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from src.storage.models import Config, SymbolConfig
+from src.storage.models import Config, SymbolConfig, NodeHealthConfig
 from src.utils.logger import get_logger
 from config.settings import settings
 
@@ -171,5 +171,6 @@ class ConfigManager:
             max_orders_per_request=settings.MAX_ORDERS_PER_REQUEST,
             file_read_retry_attempts=settings.FILE_READ_RETRY_ATTEMPTS,
             file_read_retry_delay=settings.FILE_READ_RETRY_DELAY,
-            symbols_config=[]
+            symbols_config=[],
+            node_health=NodeHealthConfig()
         )
