@@ -76,13 +76,13 @@ class OrderManager:
             # Find symbol configuration
             symbol_config = next((sc for sc in config.symbols_config if sc.symbol == order.symbol), None)
             if symbol_config is None:
-                self.logger.info(f"Order {order.id} skipped: symbol {order.symbol} not in supported symbols")
+                self.logger.debug(f"Order {order.id} skipped: symbol {order.symbol} not in supported symbols")
                 return False
             
             # Check minimum liquidity requirement
             order_liquidity = order.price * order.size
             if order_liquidity < symbol_config.min_liquidity:
-                self.logger.info(f"Order {order.id} skipped: liquidity ${order_liquidity:,.2f} < min_liquidity ${symbol_config.min_liquidity:,.2f} for {order.symbol}")
+                self.logger.debug(f"Order {order.id} skipped: liquidity {order_liquidity} < min_liquidity {symbol_config.min_liquidity} for {order.symbol}")
                 return False
             
             return True
