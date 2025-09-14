@@ -103,6 +103,9 @@ class OrderManager:
                 self.logger.debug(f"Order {order.id} filtered out by configuration rules")
                 return
             
+            # Log orders that passed filtering and are sent to WebSocket
+            self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price}")
+            
             order_id = order.id
             order_updated = False
             
@@ -156,6 +159,10 @@ class OrderManager:
             
             if len(filtered_orders) != len(orders):
                 self.logger.info(f"Filtered out {len(orders) - len(filtered_orders)} orders by configuration rules")
+            
+            # Log all orders that passed filtering and are sent to WebSocket
+            for order in filtered_orders:
+                self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price}")
             
             # Group by order id
             grouped: Dict[str, List[Order]] = {}
