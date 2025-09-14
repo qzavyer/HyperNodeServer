@@ -76,13 +76,13 @@ class OrderManager:
             # Find symbol configuration
             symbol_config = next((sc for sc in config.symbols_config if sc.symbol == order.symbol), None)
             if symbol_config is None:
-                self.logger.debug(f"Order {order.id} skipped: symbol {order.symbol} not in supported symbols")
+                self.logger.info(f"Order {order.id} skipped: symbol {order.symbol} not in supported symbols")
                 return False
             
             # Check minimum liquidity requirement
             order_liquidity = order.price * order.size
             if order_liquidity < symbol_config.min_liquidity:
-                self.logger.debug(f"Order {order.id} skipped: liquidity {order_liquidity} < min_liquidity {symbol_config.min_liquidity} for {order.symbol}")
+                self.logger.info(f"Order {order.id} skipped: liquidity ${order_liquidity:,.2f} < min_liquidity ${symbol_config.min_liquidity:,.2f} for {order.symbol}")
                 return False
             
             return True
@@ -104,7 +104,8 @@ class OrderManager:
                 return
             
             # Log orders that passed filtering and are sent to WebSocket
-            self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price} time={order.timestamp}")
+            liquidity = order.price * order.size
+            self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price} size={order.size} liquidity=${liquidity:,.2f} time={order.timestamp}")
             
             order_id = order.id
             order_updated = False
@@ -157,12 +158,14 @@ class OrderManager:
             # Filter orders based on configuration
             filtered_orders = [order for order in orders if self._should_process_order(order)]
             
-            if len(filtered_orders) != len(orders):
-                self.logger.info(f"Filtered out {len(orders) - len(filtered_orders)} orders by configuration rules")
+            filtered_count = len(orders) - len(filtered_orders)
+            if filtered_count > 0:
+                self.logger.info(f"Filtered out {filtered_count} orders by configuration rules (processed {len(filtered_orders)}/{len(orders)})")
             
             # Log all orders that passed filtering and are sent to WebSocket
             for order in filtered_orders:
-                self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price} time={order.timestamp}")
+                liquidity = order.price * order.size
+                self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price} size={order.size} liquidity=${liquidity:,.2f} time={order.timestamp}")
             
             # Group by order id
             grouped: Dict[str, List[Order]] = {}
