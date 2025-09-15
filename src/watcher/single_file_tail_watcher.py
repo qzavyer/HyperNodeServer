@@ -385,12 +385,15 @@ class SingleFileTailWatcher:
         while True:
             line = await self.current_file_handle.readline()
             if not line:  # EOF
+                logger.info(f"EOF reached, read {lines_read} lines")
                 break
             
             line = line.strip()
             if line:
                 self.line_buffer.append(line)
                 lines_read += 1
+                if lines_read % 10 == 0:  # Log every 10 lines
+                    logger.info(f"Read {lines_read} lines, buffer size: {len(self.line_buffer)}")
                 
                 # Process batch when full or timeout reached
                 if (len(self.line_buffer) >= self.batch_size or 

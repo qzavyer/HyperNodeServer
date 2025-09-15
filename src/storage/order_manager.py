@@ -141,8 +141,10 @@ class OrderManager:
             orders: Orders to apply in one batch
         """
         try:
+            self.logger.info(f"OrderManager.update_orders_batch_async called with {len(orders)} orders")
             # Filter orders based on configuration
             filtered_orders = [order for order in orders if self._should_process_order(order)]
+            self.logger.info(f"After filtering: {len(filtered_orders)}/{len(orders)} orders passed")
             
             # Log all orders that passed filtering and are sent to WebSocket
             for order in filtered_orders:
