@@ -9,7 +9,6 @@ from pathlib import Path
 from unittest.mock import patch, AsyncMock, Mock
 from datetime import datetime, timedelta
 
-from src.storage.file_storage import FileStorage
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.parser.log_parser import LogParser
@@ -96,10 +95,15 @@ class TestIntegration:
     async def test_complete_workflow(self):
         """Test complete workflow from log parsing to API response."""
         # 1. Initialize components
-        file_storage = FileStorage(str(self.data_dir))
         config_manager = ConfigManager(str(self.data_dir / "config.json"))
         
-        order_manager = OrderManager(file_storage, config_manager)
+        # Create order notifier
+        from src.notifications.order_notifier import OrderNotifier
+        from src.websocket.websocket_manager import WebSocketManager
+        websocket_manager = WebSocketManager()
+        order_notifier = OrderNotifier(websocket_manager, config_manager)
+        
+        order_manager = OrderManager(config_manager, order_notifier)
         
         # 2. Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
@@ -132,8 +136,8 @@ class TestIntegration:
         order_manager.clear()
         
         # Clear any existing data files before initialization
-        if hasattr(file_storage, 'data_dir') and file_storage.data_dir.exists():
-            for file in file_storage.data_dir.glob('*'):
+        if self.data_dir.exists():
+            for file in self.data_dir.glob('*'):
                 if file.is_file():
                     file.unlink()
         
@@ -148,8 +152,7 @@ class TestIntegration:
         for order in orders:
             await order_manager.update_order(order)
         
-        # 6. Save orders to storage
-        await file_storage.save_orders_async(orders)
+        # 6. Orders are processed in real-time (no storage needed)
         
         # 7. Verify results
         assert len(orders) == 4  # 4 valid orders, 1 invalid line
@@ -194,9 +197,14 @@ class TestIntegration:
     async def test_order_status_transitions(self):
         """Test order status transitions."""
         # Setup
-        file_storage = FileStorage(str(self.data_dir))
         config_manager = ConfigManager(str(self.data_dir / "config.json"))
-        order_manager = OrderManager(file_storage, config_manager)
+        # Create order notifier
+        from src.notifications.order_notifier import OrderNotifier
+        from src.websocket.websocket_manager import WebSocketManager
+        websocket_manager = WebSocketManager()
+        order_notifier = OrderNotifier(websocket_manager, config_manager)
+        
+        order_manager = OrderManager(config_manager, order_notifier)
         
         # Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
@@ -368,9 +376,14 @@ class TestIntegration:
     async def test_error_handling_and_recovery(self):
         """Test error handling and recovery scenarios."""
         # Setup
-        file_storage = FileStorage(str(self.data_dir))
         config_manager = ConfigManager(str(self.data_dir / "config.json"))
-        order_manager = OrderManager(file_storage, config_manager)
+        # Create order notifier
+        from src.notifications.order_notifier import OrderNotifier
+        from src.websocket.websocket_manager import WebSocketManager
+        websocket_manager = WebSocketManager()
+        order_notifier = OrderNotifier(websocket_manager, config_manager)
+        
+        order_manager = OrderManager(config_manager, order_notifier)
         
         # Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
@@ -453,9 +466,14 @@ class TestIntegration:
     async def test_performance_with_large_dataset(self):
         """Test performance with large dataset."""
         # Setup
-        file_storage = FileStorage(str(self.data_dir))
         config_manager = ConfigManager(str(self.data_dir / "config.json"))
-        order_manager = OrderManager(file_storage, config_manager)
+        # Create order notifier
+        from src.notifications.order_notifier import OrderNotifier
+        from src.websocket.websocket_manager import WebSocketManager
+        websocket_manager = WebSocketManager()
+        order_notifier = OrderNotifier(websocket_manager, config_manager)
+        
+        order_manager = OrderManager(config_manager, order_notifier)
         
         # Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
@@ -487,8 +505,8 @@ class TestIntegration:
         order_manager.clear()
         
         # Clear any existing data files before initialization
-        if hasattr(file_storage, 'data_dir') and file_storage.data_dir.exists():
-            for file in file_storage.data_dir.glob('*'):
+        if self.data_dir.exists():
+            for file in self.data_dir.glob('*'):
                 if file.is_file():
                     file.unlink()
         

@@ -11,7 +11,6 @@ import time
 from src.api.routes import router
 from src.api.websocket_routes import router as websocket_router, set_websocket_manager
 from src.api.health_routes import router as health_router
-from src.storage.file_storage import FileStorage
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.watcher.single_file_tail_watcher import SingleFileTailWatcher
@@ -108,11 +107,10 @@ app.include_router(websocket_router, prefix="/ws")
 app.include_router(health_router, prefix="/api/v1")
 
 # Global instances
-file_storage = FileStorage(settings.DATA_DIR)
 config_manager = ConfigManager()
 websocket_manager = WebSocketManager()
 order_notifier = OrderNotifier(websocket_manager, config_manager)
-order_manager = OrderManager(file_storage, config_manager, order_notifier)
+order_manager = OrderManager(config_manager, order_notifier)
 single_file_tail_watcher = SingleFileTailWatcher(order_manager)
 directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH, single_file_tail_watcher)
 node_health_monitor = None  # Will be initialized in startup_event

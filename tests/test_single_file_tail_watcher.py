@@ -138,10 +138,13 @@ class TestSingleFileTailWatcher:
             assert watcher.current_file_handle is not None
             assert watcher.current_file_position > 0  # Should be at end of file
         finally:
-            # Clean up file handle
+            # Clean up file handle and memory-mapped file
             if watcher.current_file_handle:
                 await watcher.current_file_handle.close()
                 watcher.current_file_handle = None
+            if hasattr(watcher, 'mmap_file') and watcher.mmap_file:
+                watcher.mmap_file.close()
+                watcher.mmap_file = None
     
     @pytest.mark.asyncio
     async def test_start_tailing_file_close_previous(self, watcher, temp_logs_dir):
@@ -167,10 +170,13 @@ class TestSingleFileTailWatcher:
             assert watcher.current_file_handle != first_handle
             assert watcher.current_file_handle is not None
         finally:
-            # Clean up file handle
+            # Clean up file handle and memory-mapped file
             if watcher.current_file_handle:
                 await watcher.current_file_handle.close()
                 watcher.current_file_handle = None
+            if hasattr(watcher, 'mmap_file') and watcher.mmap_file:
+                watcher.mmap_file.close()
+                watcher.mmap_file = None
     
     @pytest.mark.asyncio
     async def test_process_line_valid_order(self, watcher):
@@ -396,7 +402,10 @@ async def test_integration_find_and_start_current_file():
                 assert watcher.current_file_path == hour_15
                 assert watcher.current_file_handle is not None
             finally:
-                # Clean up file handle
+                # Clean up file handle and memory-mapped file
                 if watcher.current_file_handle:
                     await watcher.current_file_handle.close()
                     watcher.current_file_handle = None
+                if hasattr(watcher, 'mmap_file') and watcher.mmap_file:
+                    watcher.mmap_file.close()
+                    watcher.mmap_file = None

@@ -4,7 +4,6 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, TYPE_CHECKING
 from src.storage.models import Order
-from src.storage.file_storage import FileStorage
 from src.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -20,21 +19,17 @@ class OrderManagerError(Exception):
 class OrderManager:
     """Manage order state and status transitions."""
     
-    def __init__(self, storage: FileStorage, config_manager: Optional['ConfigManager'] = None, order_notifier: Optional['OrderNotifier'] = None):
+    def __init__(self, config_manager: Optional['ConfigManager'] = None, order_notifier: Optional['OrderNotifier'] = None):
         """Initialize order manager.
         
         Args:
-            storage: File storage instance
             config_manager: Configuration manager for filtering rules
             order_notifier: Order notifier for WebSocket updates
         """
-        self.storage = storage
         self.config_manager = config_manager
         self.order_notifier = order_notifier
         self.orders: Dict[str, Order] = {}
         self.logger = get_logger(__name__)
-        self._save_pending = False
-        self._save_task: Optional[asyncio.Task] = None
     
     def set_order_notifier(self, order_notifier: 'OrderNotifier'):
         """Set order notifier for WebSocket updates."""
@@ -42,16 +37,8 @@ class OrderManager:
         self.logger.info("Order notifier set for WebSocket updates")
     
     async def initialize(self) -> None:
-        """Initialize order manager by loading existing orders."""
-        try:
-            orders = await self.storage.load_orders_async()
-            for order in orders:
-                self.orders[order.id] = order
-            
-            self.logger.info(f"Loaded {len(orders)} orders from storage")
-        except Exception as e:
-            self.logger.error(f"Failed to initialize order manager: {e}")
-            raise OrderManagerError(f"Initialization failed: {e}")
+        """Initialize order manager (no persistent storage needed)."""
+        self.logger.info("Order manager initialized - running in real-time mode without persistent storage")
     
     def clear(self) -> None:
         """Clear all orders from memory (for testing)."""
@@ -134,7 +121,6 @@ class OrderManager:
                 await self.order_notifier.notify_order_update(order, notification_type="both")
             
             # Schedule async save instead of immediate save
-            await self._schedule_save_async()
             
         except Exception as e:
             self.logger.error(f"Failed to update order {order.id}: {e}")
@@ -214,40 +200,11 @@ class OrderManager:
                 await self.order_notifier.notify_orders_batch(relevant_orders, notification_type="both")
 
             # Schedule async save for the entire batch
-            await self._schedule_save_async()
 
         except Exception as e:
             self.logger.error(f"Failed to apply batch update: {e}")
             raise OrderManagerError(f"Batch update failed: {e}")
 
-    async def _schedule_save_async(self) -> None:
-        """Schedule an asynchronous save operation to prevent blocking."""
-        if self._save_pending:
-            return
-        
-        self._save_pending = True
-        
-        # Cancel existing save task if running
-        if self._save_task and not self._save_task.done():
-            self._save_task.cancel()
-        
-        # Schedule new save task with delay
-        self._save_task = asyncio.create_task(self._delayed_save_async())
-    
-    async def _delayed_save_async(self) -> None:
-        """Delayed save operation to batch multiple updates."""
-        try:
-            # Wait a bit to collect more updates
-            await asyncio.sleep(0.1)
-            
-            # Save all orders
-            await self.storage.save_orders_async(list(self.orders.values()))
-            self.logger.debug(f"Saved {len(self.orders)} orders to storage")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to save orders: {e}")
-        finally:
-            self._save_pending = False
 
     def _resolve_batch_status(self, statuses: Set[str]) -> str:
         """Resolve final status for a batch of simultaneous updates.
@@ -443,6 +400,5 @@ class OrderManager:
         if old_orders:
             self.logger.info(f"Cleaned up {len(old_orders)} orders older than {hours} hours")
             # Schedule save after cleanup
-            asyncio.create_task(self._schedule_save_async())
         
         return len(old_orders)

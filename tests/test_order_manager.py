@@ -5,15 +5,7 @@ from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timedelta
 from src.storage.order_manager import OrderManager, OrderManagerError
 from src.storage.models import Order
-from src.storage.file_storage import FileStorage
 
-@pytest.fixture
-def mock_storage():
-    """Mock file storage."""
-    storage = Mock(spec=FileStorage)
-    storage.load_orders_async = AsyncMock(return_value=[])
-    storage.save_orders_async = AsyncMock()
-    return storage
 
 @pytest.fixture
 def mock_config_manager():
@@ -35,9 +27,9 @@ def mock_order_notifier():
     return notifier
 
 @pytest.fixture
-def order_manager(mock_storage, mock_config_manager, mock_order_notifier):
+def order_manager(mock_config_manager, mock_order_notifier):
     """Order manager instance for testing."""
-    manager = OrderManager(mock_storage, mock_config_manager, mock_order_notifier)
+    manager = OrderManager(mock_config_manager, mock_order_notifier)
     return manager
 
 @pytest.fixture
@@ -57,10 +49,9 @@ def sample_order():
 class TestOrderManager:
     """Tests for OrderManager class."""
     
-    def test_init(self, mock_storage, mock_config_manager, mock_order_notifier):
+    def test_init(self, mock_config_manager, mock_order_notifier):
         """Test OrderManager initialization."""
-        manager = OrderManager(mock_storage, mock_config_manager, mock_order_notifier)
-        assert manager.storage == mock_storage
+        manager = OrderManager(mock_config_manager, mock_order_notifier)
         assert manager.config_manager == mock_config_manager
         assert manager.order_notifier == mock_order_notifier
         assert len(manager.orders) == 0
@@ -73,13 +64,11 @@ class TestOrderManager:
     
     @pytest.mark.asyncio
     async def test_initialize_loads_orders(self, order_manager, sample_order):
-        """Test that initialize loads orders from storage."""
-        order_manager.storage.load_orders_async.return_value = [sample_order]
-        
+        """Test that initialize works without storage (real-time mode)."""
         await order_manager.initialize()
         
-        assert len(order_manager.orders) == 1
-        assert order_manager.orders["123"] == sample_order
+        # In real-time mode, no orders are loaded from storage
+        assert len(order_manager.orders) == 0
     
     @pytest.mark.asyncio
     async def test_add_new_order(self, order_manager, sample_order):
