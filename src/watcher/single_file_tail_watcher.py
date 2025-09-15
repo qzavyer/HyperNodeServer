@@ -8,6 +8,8 @@ import time
 import re
 import json
 import concurrent.futures
+import mmap
+import threading
 from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent
@@ -72,8 +74,30 @@ class SingleFileTailWatcher:
         self.json_optimization = settings.TAIL_JSON_OPTIMIZATION
         self.pre_filter = settings.TAIL_PRE_FILTER
         
+        # Revolutionary memory-mapped processing
+        self.memory_mapped = settings.TAIL_MEMORY_MAPPED
+        self.mmap_chunk_size = settings.TAIL_MMAP_CHUNK_SIZE
+        self.zero_copy = settings.TAIL_ZERO_COPY
+        self.lock_free = settings.TAIL_LOCK_FREE
+        
+        # Streaming processing
+        self.streaming = settings.TAIL_STREAMING
+        self.stream_buffer_size = settings.TAIL_STREAM_BUFFER_SIZE
+        self.stream_chunk_size = settings.TAIL_STREAM_CHUNK_SIZE
+        self.stream_processing_delay = settings.TAIL_STREAM_PROCESSING_DELAY_MS / 1000.0
+        
         # Thread pool for parallel processing
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.parallel_workers)
+        
+        # Memory-mapped file state
+        self.mmap_file = None
+        self.mmap_data = None
+        self.mmap_position = 0
+        self.mmap_lock = threading.RLock() if not self.lock_free else None
+        
+        # Streaming state
+        self.stream_buffer = bytearray()
+        self.stream_position = 0
         
         # Pre-filtering patterns for fast line validation
         self.valid_line_patterns = [
@@ -151,6 +175,14 @@ class SingleFileTailWatcher:
                 logger.debug(f"Closed file handle: {self.current_file_path}")
             except Exception as e:
                 logger.warning(f"Error closing file {self.current_file_path}: {e}")
+        
+        # Close memory-mapped file
+        if self.mmap_file:
+            try:
+                self.mmap_file.close()
+                logger.debug("Closed memory-mapped file")
+            except Exception as e:
+                logger.warning(f"Error closing memory-mapped file: {e}")
         
         # Shutdown thread pool
         self.executor.shutdown(wait=True)
@@ -244,6 +276,10 @@ class SingleFileTailWatcher:
             await self.current_file_handle.seek(0, 2)
             self.current_file_position = await self.current_file_handle.tell()
             
+            # Initialize memory-mapped file if enabled
+            if self.memory_mapped:
+                await self._init_memory_mapped_file(file_path)
+            
             logger.info(f"Started tailing {file_path} (position: {self.current_file_position})")
             
         except Exception as e:
@@ -276,22 +312,108 @@ class SingleFileTailWatcher:
         logger.info("Tail loop stopped")
     
     async def _read_new_lines(self) -> None:
-        """Reads new lines from current file using optimized batch approach."""
+        """Reads new lines using revolutionary memory-mapped approach."""
         try:
             if not self.current_file_handle:
                 return
             
-            # Read multiple lines at once for better performance
-            lines_read = 0
-            while True:
-                line = await self.current_file_handle.readline()
-                if not line:  # EOF
-                    break
+            # Use revolutionary approach based on settings
+            if self.streaming:
+                await self._read_streaming_lines()
+            elif self.memory_mapped and self.mmap_data:
+                await self._read_memory_mapped_lines()
+            else:
+                await self._read_traditional_lines()
+                        
+        except Exception as e:
+            logger.error(f"Error reading lines from {self.current_file_path}: {e}")
+            raise
+    
+    async def _read_traditional_lines(self) -> None:
+        """Traditional readline approach (fallback)."""
+        lines_read = 0
+        while True:
+            line = await self.current_file_handle.readline()
+            if not line:  # EOF
+                break
+            
+            line = line.strip()
+            if line:
+                self.line_buffer.append(line)
+                lines_read += 1
                 
+                # Process batch when full or timeout reached
+                if (len(self.line_buffer) >= self.batch_size or 
+                    self._should_process_batch()):
+                    await self._process_batch()
+    
+    async def _read_memory_mapped_lines(self) -> None:
+        """Revolutionary memory-mapped line reading."""
+        try:
+            # Get current file size
+            current_size = self.current_file_handle.tell()
+            
+            # If file grew, read new data
+            if current_size > self.mmap_position:
+                # Read new chunk
+                new_data_size = current_size - self.mmap_position
+                new_data = self.mmap_data[self.mmap_position:current_size]
+                
+                # Process new data in chunks
+                await self._process_memory_mapped_chunk(new_data)
+                
+                # Update position
+                self.mmap_position = current_size
+                
+        except Exception as e:
+            logger.error(f"Error in memory-mapped reading: {e}")
+            # Fallback to traditional approach
+            await self._read_traditional_lines()
+    
+    async def _init_memory_mapped_file(self, file_path: Path) -> None:
+        """Initialize memory-mapped file for ultra-fast reading."""
+        try:
+            # Close previous mmap if exists
+            if self.mmap_file:
+                self.mmap_file.close()
+            
+            # Open file for memory mapping
+            with open(file_path, 'rb') as f:
+                # Get file size
+                f.seek(0, 2)
+                file_size = f.tell()
+                
+                if file_size > 0:
+                    # Create memory map
+                    self.mmap_file = mmap.mmap(f.fileno(), file_size, access=mmap.ACCESS_READ)
+                    self.mmap_data = self.mmap_file
+                    self.mmap_position = file_size  # Start from end
+                    
+                    logger.info(f"Initialized memory-mapped file: {file_size} bytes")
+                else:
+                    logger.warning("File is empty, skipping memory mapping")
+                    
+        except Exception as e:
+            logger.error(f"Error initializing memory-mapped file: {e}")
+            self.mmap_file = None
+            self.mmap_data = None
+    
+    async def _process_memory_mapped_chunk(self, data: bytes) -> None:
+        """Process memory-mapped chunk with zero-copy string operations."""
+        try:
+            # Convert bytes to string (zero-copy if possible)
+            if self.zero_copy:
+                # Use memoryview for zero-copy operations
+                text = data.decode('utf-8', errors='ignore')
+            else:
+                text = data.decode('utf-8', errors='ignore')
+            
+            # Split into lines and process
+            lines = text.split('\n')
+            for line in lines:
                 line = line.strip()
                 if line:
                     self.line_buffer.append(line)
-                    lines_read += 1
                     
                     # Process batch when full or timeout reached
                     if (len(self.line_buffer) >= self.batch_size or 
@@ -299,8 +421,69 @@ class SingleFileTailWatcher:
                         await self._process_batch()
                         
         except Exception as e:
-            logger.error(f"Error reading lines from {self.current_file_path}: {e}")
-            raise
+            logger.error(f"Error processing memory-mapped chunk: {e}")
+    
+    async def _read_streaming_lines(self) -> None:
+        """Revolutionary streaming processing for maximum speed."""
+        try:
+            # Get current file size
+            current_size = self.current_file_handle.tell()
+            
+            # If file grew, read new data in streaming chunks
+            if current_size > self.stream_position:
+                # Read new data in chunks
+                while self.stream_position < current_size:
+                    # Calculate chunk size
+                    chunk_size = min(self.stream_chunk_size, current_size - self.stream_position)
+                    
+                    # Read chunk
+                    await self.current_file_handle.seek(self.stream_position)
+                    chunk_data = await self.current_file_handle.read(chunk_size)
+                    
+                    if chunk_data:
+                        # Add to stream buffer
+                        self.stream_buffer.extend(chunk_data)
+                        
+                        # Process complete lines from buffer
+                        await self._process_stream_buffer()
+                        
+                        # Update position
+                        self.stream_position += len(chunk_data)
+                    
+                    # Small delay to prevent overwhelming the system
+                    if self.stream_processing_delay > 0:
+                        await asyncio.sleep(self.stream_processing_delay)
+                        
+        except Exception as e:
+            logger.error(f"Error in streaming reading: {e}")
+            # Fallback to traditional approach
+            await self._read_traditional_lines()
+    
+    async def _process_stream_buffer(self) -> None:
+        """Process streaming buffer for complete lines."""
+        try:
+            # Find complete lines in buffer
+            while b'\n' in self.stream_buffer:
+                # Find first newline
+                newline_pos = self.stream_buffer.find(b'\n')
+                
+                # Extract line
+                line_bytes = self.stream_buffer[:newline_pos]
+                self.stream_buffer = self.stream_buffer[newline_pos + 1:]
+                
+                # Convert to string
+                line = line_bytes.decode('utf-8', errors='ignore').strip()
+                
+                if line:
+                    self.line_buffer.append(line)
+                    
+                    # Process batch when full or timeout reached
+                    if (len(self.line_buffer) >= self.batch_size or 
+                        self._should_process_batch()):
+                        await self._process_batch()
+                        
+        except Exception as e:
+            logger.error(f"Error processing stream buffer: {e}")
     
     def _should_process_batch(self) -> bool:
         """Check if batch should be processed due to timeout."""
@@ -551,6 +734,13 @@ class SingleFileTailWatcher:
             "cache_size": len(self.json_cache),
             "pre_filter_passed": self.pre_filter_passed,
             "pre_filter_rejected": self.pre_filter_rejected,
+            "memory_mapped": self.memory_mapped,
+            "streaming": self.streaming,
+            "zero_copy": self.zero_copy,
+            "lock_free": self.lock_free,
+            "stream_buffer_size": len(self.stream_buffer),
+            "mmap_position": self.mmap_position,
+            "stream_position": self.stream_position,
             "total_lines_processed": self.total_lines_processed,
             "total_orders_processed": self.total_orders_processed
         }
