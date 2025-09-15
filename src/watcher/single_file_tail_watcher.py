@@ -414,17 +414,19 @@ class SingleFileTailWatcher:
             return
         
         try:
-            logger.info("About to call tell() on file handle")
-            # Check file position and size
-            current_pos = await self.current_file_handle.tell()
-            logger.info(f"Current file position: {current_pos}")
+            # Use non-blocking approach - get file size from filesystem
+            import os
+            file_stat = os.stat(self.current_file_path)
+            file_size = file_stat.st_size
+            logger.info(f"File size from os.stat: {file_size}")
             
-            await self.current_file_handle.seek(0, 2)  # Seek to end
-            file_size = await self.current_file_handle.tell()
-            logger.info(f"File size from seek: {file_size}")
-            
-            await self.current_file_handle.seek(current_pos)  # Restore position
-            logger.info(f"Restored position to: {current_pos}")
+            # Get current position (this might block, but we need it)
+            try:
+                current_pos = await self.current_file_handle.tell()
+                logger.info(f"Current file position: {current_pos}")
+            except Exception as e:
+                logger.error(f"Error getting file position: {e}")
+                return
             
             new_data_bytes = file_size - current_pos
             logger.info(f"File position: {current_pos}, file size: {file_size}, new data: {new_data_bytes} bytes")
