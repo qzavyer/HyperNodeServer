@@ -89,6 +89,14 @@ class Settings(BaseSettings):
     
     # Data settings
     DATA_DIR: str = "data"
+    
+    # Resource monitoring settings for HyperLiquid node coexistence
+    ENABLE_RESOURCE_MONITORING: bool = True  # Enable resource monitoring
+    MAX_CPU_USAGE_PERCENT: float = 30.0  # Maximum CPU usage (30% to leave 70% for HyperLiquid)
+    MAX_MEMORY_USAGE_MB: int = 2048  # Maximum memory usage (2GB)
+    RESOURCE_CHECK_INTERVAL_SEC: int = 60  # Check resources every 60 seconds
+    THROTTLE_ON_HIGH_USAGE: bool = True  # Throttle processing when resources are high
+    THROTTLE_FACTOR: float = 0.5  # Reduce processing by 50% when throttling
     CONFIG_FILE_PATH: str = "config/coins.json"
     
     # API limits

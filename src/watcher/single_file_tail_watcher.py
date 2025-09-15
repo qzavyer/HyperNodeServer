@@ -11,6 +11,7 @@ import concurrent.futures
 import mmap
 import threading
 import os
+import psutil
 from functools import lru_cache
 from datetime import datetime
 from watchdog.observers import Observer
@@ -18,6 +19,7 @@ from watchdog.events import FileSystemEventHandler, FileCreatedEvent
 
 from src.parser.log_parser import LogParser
 from src.storage.order_manager import OrderManager
+from src.monitoring.resource_monitor import ResourceMonitor
 from src.utils.logger import get_logger
 from config.settings import settings
 
@@ -70,9 +72,11 @@ class SingleFileTailWatcher:
         self.buffer_size = settings.TAIL_BUFFER_SIZE
         self.aggressive_polling = settings.TAIL_AGGRESSIVE_POLLING
         
-        # Parallel processing settings with CPU optimization
+        # Parallel processing settings - conservative for HyperLiquid node coexistence
         if settings.MAX_WORKERS_AUTO:
-            self.parallel_workers = min(settings.TAIL_PARALLEL_WORKERS, os.cpu_count() or 4)
+            # Use only 1/4 of available CPU cores to leave resources for HyperLiquid node
+            available_cores = os.cpu_count() or 4
+            self.parallel_workers = max(1, min(settings.TAIL_PARALLEL_WORKERS, available_cores // 4))
         else:
             self.parallel_workers = settings.TAIL_PARALLEL_WORKERS
         self.parallel_batch_size = settings.TAIL_PARALLEL_BATCH_SIZE
@@ -113,6 +117,9 @@ class SingleFileTailWatcher:
         
         # Cache for compiled regex patterns
         self._pattern_cache = {}
+        
+        # Resource monitoring for HyperLiquid node coexistence
+        self.resource_monitor = ResourceMonitor()
         
         # Batch processing
         self.line_buffer = []
@@ -340,8 +347,9 @@ class SingleFileTailWatcher:
                     # Clear completed tasks
                     tasks = list(pending)
                 
-                # Always yield control to event loop
-                await asyncio.sleep(self.tail_interval)
+                # Check resource usage and throttle if necessary
+                throttle_factor = self.resource_monitor.get_throttle_factor()
+                await asyncio.sleep(self.tail_interval * throttle_factor)
                 
             except Exception as e:
                 logger.error(f"Error in tail loop: {e}")
@@ -638,6 +646,10 @@ class SingleFileTailWatcher:
         self.pre_filter_rejected += 1
         return False
     
+    def _check_resource_usage(self) -> bool:
+        """Check if resource usage is within limits for HyperLiquid node coexistence."""
+        return not self.resource_monitor.should_throttle()
+    
     def _parse_line_optimized(self, line: str) -> Optional:
         """Optimized line parsing with JSON caching and pre-filtering."""
         if not line.strip():
@@ -789,5 +801,7 @@ class SingleFileTailWatcher:
             "mmap_position": self.mmap_position,
             "stream_position": self.stream_position,
             "total_lines_processed": self.total_lines_processed,
-            "total_orders_processed": self.total_orders_processed
+            "total_orders_processed": self.total_orders_processed,
+            "resource_monitor": self.resource_monitor.get_status(),
+            "resource_usage": self.resource_monitor.check_resources()
         }
