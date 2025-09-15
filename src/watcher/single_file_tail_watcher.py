@@ -420,14 +420,12 @@ class SingleFileTailWatcher:
             file_size = file_stat.st_size
             logger.info(f"File size from os.stat: {file_size}")
             
-            # Get current position (this might block, but we need it)
-            try:
-                current_pos = await self.current_file_handle.tell()
-                logger.info(f"Current file position: {current_pos}")
-            except Exception as e:
-                logger.error(f"Error getting file position: {e}")
-                return
+            # Get current position from our internal tracking
+            if not hasattr(self, 'file_position'):
+                self.file_position = file_size  # Start from end
+                logger.info(f"Initialized file position to: {self.file_position}")
             
+            current_pos = self.file_position
             new_data_bytes = file_size - current_pos
             logger.info(f"File position: {current_pos}, file size: {file_size}, new data: {new_data_bytes} bytes")
         except Exception as e:
@@ -438,27 +436,39 @@ class SingleFileTailWatcher:
             logger.info("No new data available, file not growing")
             return
         
-        # Read only new lines (non-blocking)
-        while True:
-            line = await self.current_file_handle.readline()
-            if not line:  # EOF - no new data
-                if lines_read > 0:
-                    logger.info(f"EOF reached, read {lines_read} lines")
-                else:
-                    logger.info("EOF reached, no new lines found")
-                break
-            
-            line = line.strip()
-            if line:
-                self.line_buffer.append(line)
-                lines_read += 1
-                if lines_read % 10 == 0:  # Log every 10 lines
-                    logger.info(f"Read {lines_read} lines, buffer size: {len(self.line_buffer)}")
-                
-                # Process batch when full or timeout reached
-                if (len(self.line_buffer) >= self.batch_size or 
-                    self._should_process_batch()):
-                    await self._process_batch()
+        # Read new data using regular file operations (non-blocking)
+        if new_data_bytes > 0:
+            try:
+                # Open file in binary mode for precise positioning
+                with open(self.current_file_path, 'rb') as f:
+                    f.seek(current_pos)  # Seek to our last position
+                    new_data = f.read(new_data_bytes)  # Read only new data
+                    
+                    # Convert to text and split into lines
+                    new_text = new_data.decode('utf-8', errors='ignore')
+                    new_lines = new_text.split('\n')
+                    
+                    # Process each line
+                    for line in new_lines:
+                        line = line.strip()
+                        if line:
+                            self.line_buffer.append(line)
+                            lines_read += 1
+                            if lines_read % 10 == 0:  # Log every 10 lines
+                                logger.info(f"Read {lines_read} lines, buffer size: {len(self.line_buffer)}")
+                            
+                            # Process batch when full or timeout reached
+                            if (len(self.line_buffer) >= self.batch_size or 
+                                self._should_process_batch()):
+                                await self._process_batch()
+                    
+                    # Update our position
+                    self.file_position = file_size
+                    logger.info(f"Updated file position to: {self.file_position}")
+                    
+            except Exception as e:
+                logger.error(f"Error reading new data: {e}")
+                return
         
         # Process remaining lines in buffer
         if self.line_buffer and self._should_process_batch():
