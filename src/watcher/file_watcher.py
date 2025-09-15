@@ -60,7 +60,7 @@ class FileWatcher:
         self.logs_path = Path(settings.NODE_LOGS_PATH).expanduser()
         self.observer = Observer()
         self.handler = LogFileHandler(self)
-        self.parser = LogParser(chunk_size=8192, batch_size=1000)
+        self.parser = LogParser(chunk_size=settings.CHUNK_SIZE_BYTES, batch_size=settings.BATCH_SIZE)
         self.is_running = False
         self.processing_files: set = set()  # Track files being processed
         self.pending_files: asyncio.Queue = asyncio.Queue()  # Queue for file processing
@@ -168,6 +168,11 @@ class FileWatcher:
         # Добавляем файл в очередь для фоновой обработки
         await self.pending_files.put(file_path)
         logger.info(f"Scheduled {file_path} ({file_size_gb:.2f} GB) for background processing")
+        
+        # Для небольших файлов (< 100MB) обрабатываем немедленно
+        if file_size_gb < 0.1:  # 100MB
+            logger.info(f"Small file detected, processing immediately: {file_path}")
+            await self._process_file_background(file_path)
     
     async def _background_file_processor(self) -> None:
         """Background processor that handles files without blocking API."""
@@ -222,8 +227,8 @@ class FileWatcher:
                 await self.order_manager.update_orders_batch_async(batch)
                 total_orders += len(batch)
                 
-                # Пауза между батчами, чтобы не блокировать API
-                await asyncio.sleep(0.1)
+                # Минимальная пауза между батчами для неблокирующей обработки
+                await asyncio.sleep(settings.BATCH_PROCESSING_DELAY_MS)
                 
                 # Логируем прогресс
                 if total_orders % 10000 == 0:
@@ -316,7 +321,7 @@ class FileWatcher:
         
         while self.is_running:
             try:
-                await asyncio.sleep(5)  # Scan every 30 seconds
+                await asyncio.sleep(settings.PERIODIC_SCAN_INTERVAL_SEC)  # Configurable scan interval
                 
                 # Find current hour file
                 current_file = self._find_latest_file()

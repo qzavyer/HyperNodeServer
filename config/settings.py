@@ -24,9 +24,16 @@ class Settings(BaseSettings):
     # Performance optimization settings
     MAX_FILE_SIZE_GB: float = 50.0  # Maximum file size to process (GB)
     MAX_ORDERS_PER_FILE: Optional[int] = 1000000  # Maximum orders per file (None = unlimited)
-    CHUNK_SIZE_BYTES: int = 8192  # File reading chunk size
-    BATCH_SIZE: int = 1000  # Orders processing batch size
+    CHUNK_SIZE_BYTES: int = 16384  # Increased chunk size for faster reading (16KB)
+    BATCH_SIZE: int = 2000  # Increased batch size for faster processing
     PROCESSING_TIMEOUT_PER_GB: int = 5  # Seconds per GB for file processing
+    BATCH_PROCESSING_DELAY_MS: float = 0.001  # Minimal delay between batches (1ms)
+    PERIODIC_SCAN_INTERVAL_SEC: int = 1  # Scan interval for real-time data (1 second)
+    
+    # Single file tail watcher settings
+    SINGLE_FILE_TAIL_ENABLED: bool = True  # Enable single file tail approach
+    FALLBACK_SCAN_INTERVAL_SEC: int = 600  # Fallback scan interval (10 minutes)
+    TAIL_READLINE_INTERVAL_MS: float = 0.1  # Interval between readline() calls (100ms)
     
     # WebSocket settings
     WEBSOCKET_PING_INTERVAL: int = 20  # Ping interval in seconds

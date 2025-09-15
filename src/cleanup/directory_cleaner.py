@@ -18,14 +18,16 @@ from config.settings import settings
 class DirectoryCleaner:
     """Класс для очистки директорий с логами."""
     
-    def __init__(self, base_dir: str = "/app/node_logs"):
+    def __init__(self, base_dir: str = "/app/node_logs", single_file_watcher=None):
         """Инициализация очистителя директорий.
         
         Args:
             base_dir: Базовая директория для очистки
+            single_file_watcher: Ссылка на SingleFileTailWatcher для защиты текущего файла
         """
         self.base_dir = Path(base_dir).expanduser().resolve()
         self.logger = logging.getLogger(__name__)
+        self.single_file_watcher = single_file_watcher
         
         # Регулярка для поиска папок с форматом даты yyyyMMdd
         self.date_pattern = re.compile(r"^\d{8}$")
@@ -142,11 +144,28 @@ class DirectoryCleaner:
         """
         removed_files = 0
         
+        # Получаем текущий файл из SingleFileTailWatcher для защиты
+        current_file_path = None
+        if self.single_file_watcher:
+            try:
+                status = self.single_file_watcher.get_status()
+                current_file_path = status.get("current_file")
+                if current_file_path:
+                    current_file_path = Path(current_file_path)
+                    self.logger.debug(f"🛡️ Защищаем текущий файл от удаления: {current_file_path}")
+            except Exception as e:
+                self.logger.warning(f"Не удалось получить текущий файл из watcher: {e}")
+        
         try:
             # Рекурсивно обходим директорию
             for root, _, files in os.walk(dir_path):
                 for file in files:
                     file_path = Path(root) / file
+                    
+                    # Проверяем, не является ли это текущим файлом
+                    if current_file_path and file_path == current_file_path:
+                        self.logger.debug(f"🛡️ Пропускаем удаление текущего файла: {file_path}")
+                        continue
                     
                     try:
                         # Получаем время модификации файла

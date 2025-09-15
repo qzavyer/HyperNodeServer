@@ -15,6 +15,7 @@ from src.storage.file_storage import FileStorage
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.watcher.file_watcher import FileWatcher
+from src.watcher.single_file_tail_watcher import SingleFileTailWatcher
 from src.watcher.hybrid_manager import HybridManager
 from src.websocket.websocket_manager import WebSocketManager
 from src.notifications.order_notifier import OrderNotifier
@@ -115,8 +116,9 @@ websocket_manager = WebSocketManager()
 order_notifier = OrderNotifier(websocket_manager, config_manager)
 order_manager = OrderManager(file_storage, config_manager, order_notifier)
 file_watcher = FileWatcher(order_manager)
+single_file_tail_watcher = SingleFileTailWatcher(order_manager)
 hybrid_manager = HybridManager(file_watcher, order_manager)
-directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH)
+directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH, single_file_tail_watcher)
 node_health_monitor = None  # Will be initialized in startup_event
 
 # Set WebSocket manager in routes
@@ -148,6 +150,13 @@ async def startup_event():
         logger.info("✅ Application started successfully")
         logger.info(f"📊 Loaded {order_manager.get_order_count()} orders")
         
+        # Start single file tail watcher for real-time processing
+        if settings.SINGLE_FILE_TAIL_ENABLED:
+            await single_file_tail_watcher.start_async()
+            logger.info("✅ Single file tail watcher started successfully")
+        else:
+            logger.info("Single file tail watcher disabled in settings")
+        
         # Start hybrid manager (includes both legacy and realtime watchers)
         await hybrid_manager.start_async()
         
@@ -163,6 +172,10 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on application shutdown."""
     try:
+        # Stop single file tail watcher
+        if settings.SINGLE_FILE_TAIL_ENABLED:
+            await single_file_tail_watcher.stop_async()
+        
         # Stop hybrid manager
         await hybrid_manager.stop_async()
         
@@ -200,6 +213,7 @@ async def health_check():
 async def performance_info():
     """Performance information endpoint."""
     return {
+        "single_file_tail_watcher": single_file_tail_watcher.get_status() if settings.SINGLE_FILE_TAIL_ENABLED else {"enabled": False},
         "hybrid_manager_stats": hybrid_manager.get_stats(),
         "websocket_status": websocket_manager.get_connection_stats(),
         "notifications": order_notifier.get_notification_stats(),
@@ -211,7 +225,9 @@ async def performance_info():
             "max_file_size_gb": settings.MAX_FILE_SIZE_GB,
             "max_orders_per_file": settings.MAX_ORDERS_PER_FILE,
             "chunk_size_bytes": settings.CHUNK_SIZE_BYTES,
-            "batch_size": settings.BATCH_SIZE
+            "batch_size": settings.BATCH_SIZE,
+            "single_file_tail_enabled": settings.SINGLE_FILE_TAIL_ENABLED,
+            "fallback_scan_interval_sec": settings.FALLBACK_SCAN_INTERVAL_SEC
         },
         "directory_cleanup": directory_cleaner.get_cleanup_stats()
     }
@@ -244,5 +260,32 @@ async def realtime_metrics():
         "total_processing": {
             "orders_processed": stats["total_orders_processed"],
             "running": stats["running"]
+        }
+    }
+
+@app.get("/metrics/single-file-tail")
+async def single_file_tail_metrics():
+    """Single file tail watcher metrics."""
+    if not settings.SINGLE_FILE_TAIL_ENABLED:
+        return {"enabled": False, "message": "Single file tail watcher is disabled"}
+    
+    status = single_file_tail_watcher.get_status()
+    return {
+        "enabled": True,
+        "status": status,
+        "current_file_info": {
+            "path": status.get("current_file"),
+            "position": status.get("current_position"),
+            "is_active": status.get("is_running", False)
+        },
+        "performance": {
+            "tail_interval_ms": status.get("tail_interval_ms"),
+            "fallback_interval_sec": status.get("fallback_interval_sec"),
+            "watchdog_active": status.get("watchdog_active", False)
+        },
+        "settings": {
+            "single_file_tail_enabled": settings.SINGLE_FILE_TAIL_ENABLED,
+            "fallback_scan_interval_sec": settings.FALLBACK_SCAN_INTERVAL_SEC,
+            "tail_readline_interval_ms": settings.TAIL_READLINE_INTERVAL_MS
         }
     }
