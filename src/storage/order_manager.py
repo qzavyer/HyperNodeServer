@@ -63,13 +63,13 @@ class OrderManager:
             # Find symbol configuration
             symbol_config = next((sc for sc in config.symbols_config if sc.symbol == order.symbol), None)
             if symbol_config is None:
-                self.logger.info(f"Order {order.id} skipped: symbol {order.symbol} not in supported symbols")
+                # self.logger.debug(f"Order {order.id} skipped: symbol {order.symbol} not in supported symbols")
                 return False
             
             # Check minimum liquidity requirement
             order_liquidity = order.price * order.size
             if order_liquidity < symbol_config.min_liquidity:
-                self.logger.info(f"Order {order.id} skipped: liquidity {order_liquidity} < min_liquidity {symbol_config.min_liquidity} for {order.symbol}")
+                # self.logger.debug(f"Order {order.id} skipped: liquidity {order_liquidity} < min_liquidity {symbol_config.min_liquidity} for {order.symbol}")
                 return False
             
             return True
@@ -141,10 +141,8 @@ class OrderManager:
             orders: Orders to apply in one batch
         """
         try:
-            self.logger.info(f"OrderManager.update_orders_batch_async called with {len(orders)} orders")
             # Filter orders based on configuration
             filtered_orders = [order for order in orders if self._should_process_order(order)]
-            self.logger.info(f"After filtering: {len(filtered_orders)}/{len(orders)} orders passed")
             
             # Log all orders that passed filtering and are sent to WebSocket
             for order in filtered_orders:

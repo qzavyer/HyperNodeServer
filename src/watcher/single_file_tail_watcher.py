@@ -390,13 +390,10 @@ class SingleFileTailWatcher:
             
             # Use revolutionary approach based on settings
             if self.streaming:
-                logger.info("Using streaming approach")
                 await self._read_streaming_lines()
             elif self.memory_mapped and self.mmap_data:
-                logger.info("Using memory-mapped approach")
                 await self._read_memory_mapped_lines()
             else:
-                logger.info("Using traditional approach")
                 await self._read_traditional_lines()
                         
         except Exception as e:
@@ -405,7 +402,6 @@ class SingleFileTailWatcher:
     
     async def _read_traditional_lines(self) -> None:
         """Traditional readline approach (fallback)."""
-        logger.info("_read_traditional_lines() called")
         lines_read = 0
         
         # Check if file handle is valid
@@ -418,7 +414,6 @@ class SingleFileTailWatcher:
             import os
             file_stat = os.stat(self.current_file_path)
             file_size = file_stat.st_size
-            logger.info(f"File size from os.stat: {file_size}")
             
             # Get current position from our internal tracking
             if not hasattr(self, 'file_position') or not hasattr(self, 'last_file_path') or self.last_file_path != self.current_file_path:
@@ -426,10 +421,10 @@ class SingleFileTailWatcher:
                 self.file_position = file_size
                 self.last_file_path = self.current_file_path
                 logger.info(f"New file detected, initialized file position to: {self.file_position}")
+                return  # No new data on first read
             
             current_pos = self.file_position
             new_data_bytes = file_size - current_pos
-            logger.info(f"File position: {current_pos}, file size: {file_size}, new data: {new_data_bytes} bytes")
         except Exception as e:
             logger.error(f"Error checking file position: {e}")
             return
@@ -642,7 +637,7 @@ class SingleFileTailWatcher:
             if orders:
                 await self.order_manager.update_orders_batch_async(orders)
                 self.total_orders_processed += len(orders)
-                logger.info(f"Processed batch of {len(orders)} orders")
+                # logger.info(f"Processed batch of {len(orders)} orders")
             
             # Update counters
             self.total_lines_processed += len(self.line_buffer)
