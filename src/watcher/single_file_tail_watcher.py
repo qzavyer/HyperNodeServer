@@ -386,10 +386,21 @@ class SingleFileTailWatcher:
     async def _read_traditional_lines(self) -> None:
         """Traditional readline approach (fallback)."""
         lines_read = 0
+        
+        # Check file position and size
+        current_pos = await self.current_file_handle.tell()
+        await self.current_file_handle.seek(0, 2)  # Seek to end
+        file_size = await self.current_file_handle.tell()
+        await self.current_file_handle.seek(current_pos)  # Restore position
+        
+        logger.info(f"File position: {current_pos}, file size: {file_size}, new data: {file_size - current_pos} bytes")
+        
+        # Read only new lines (non-blocking)
         while True:
             line = await self.current_file_handle.readline()
-            if not line:  # EOF
-                logger.info(f"EOF reached, read {lines_read} lines")
+            if not line:  # EOF - no new data
+                if lines_read > 0:
+                    logger.info(f"EOF reached, read {lines_read} lines")
                 break
             
             line = line.strip()
@@ -403,6 +414,10 @@ class SingleFileTailWatcher:
                 if (len(self.line_buffer) >= self.batch_size or 
                     self._should_process_batch()):
                     await self._process_batch()
+        
+        # Process remaining lines in buffer
+        if self.line_buffer and self._should_process_batch():
+            await self._process_batch()
     
     async def _read_memory_mapped_lines(self) -> None:
         """Revolutionary memory-mapped line reading."""
