@@ -48,3 +48,47 @@ class TestFileStorage:
         """Test loading orders from empty file."""
         orders = self.storage.load_orders()
         assert orders == []
+    
+    def test_load_orders_empty_file_with_whitespace(self):
+        """Test loading orders from file with only whitespace."""
+        # Create file with only whitespace
+        with open(self.storage.orders_file, 'w') as f:
+            f.write("   \n\t  \n  ")
+        
+        orders = self.storage.load_orders()
+        assert orders == []
+    
+    def test_load_orders_invalid_json(self):
+        """Test loading orders from file with invalid JSON."""
+        # Create file with invalid JSON
+        with open(self.storage.orders_file, 'w') as f:
+            f.write('{"invalid": json}')
+        
+        orders = self.storage.load_orders()
+        assert orders == []
+    
+    @pytest.mark.asyncio
+    async def test_load_orders_async_empty_file(self):
+        """Test async loading orders from empty file."""
+        orders = await self.storage.load_orders_async()
+        assert orders == []
+    
+    @pytest.mark.asyncio
+    async def test_load_orders_async_empty_file_with_whitespace(self):
+        """Test async loading orders from file with only whitespace."""
+        # Create file with only whitespace
+        with open(self.storage.orders_file, 'w') as f:
+            f.write("   \n\t  \n  ")
+        
+        orders = await self.storage.load_orders_async()
+        assert orders == []
+    
+    @pytest.mark.asyncio
+    async def test_load_orders_async_invalid_json(self):
+        """Test async loading orders from file with invalid JSON."""
+        # Create file with invalid JSON
+        with open(self.storage.orders_file, 'w') as f:
+            f.write('{"invalid": json}')
+        
+        orders = await self.storage.load_orders_async()
+        assert orders == []

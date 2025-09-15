@@ -108,7 +108,7 @@ app.include_router(websocket_router, prefix="/ws")
 app.include_router(health_router, prefix="/api/v1")
 
 # Global instances
-file_storage = FileStorage()
+file_storage = FileStorage(settings.DATA_DIR)
 config_manager = ConfigManager()
 websocket_manager = WebSocketManager()
 order_notifier = OrderNotifier(websocket_manager, config_manager)

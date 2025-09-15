@@ -54,11 +54,21 @@ class FileStorage:
             
             async with aiofiles.open(self.orders_file, 'r') as f:
                 content = await f.read()
+                
+                # Check if file is empty or contains only whitespace
+                if not content.strip():
+                    self.logger.info(f"Orders file {self.orders_file} is empty, returning empty list")
+                    return []
+                
                 orders_data = json.loads(content)
             
             orders = [Order(**order_data) for order_data in orders_data]
             self.logger.info(f"Loaded {len(orders)} orders from {self.orders_file}")
             return orders
+        except json.JSONDecodeError as e:
+            self.logger.warning(f"Invalid JSON in orders file {self.orders_file}: {e}")
+            self.logger.info("Returning empty orders list due to invalid JSON")
+            return []
         except Exception as e:
             raise StorageError(f"Failed to load orders: {e}")
     
@@ -88,10 +98,21 @@ class FileStorage:
                 return []
             
             with open(self.orders_file, 'r') as f:
-                orders_data = json.load(f)
+                content = f.read()
+                
+                # Check if file is empty or contains only whitespace
+                if not content.strip():
+                    self.logger.info(f"Orders file {self.orders_file} is empty, returning empty list")
+                    return []
+                
+                orders_data = json.loads(content)
             
             orders = [Order(**order_data) for order_data in orders_data]
             self.logger.info(f"Loaded {len(orders)} orders from {self.orders_file}")
             return orders
+        except json.JSONDecodeError as e:
+            self.logger.warning(f"Invalid JSON in orders file {self.orders_file}: {e}")
+            self.logger.info("Returning empty orders list due to invalid JSON")
+            return []
         except Exception as e:
             raise StorageError(f"Failed to load orders: {e}")
