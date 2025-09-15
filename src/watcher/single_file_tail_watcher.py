@@ -405,16 +405,26 @@ class SingleFileTailWatcher:
     
     async def _read_traditional_lines(self) -> None:
         """Traditional readline approach (fallback)."""
+        logger.info("_read_traditional_lines() called")
         lines_read = 0
         
-        # Check file position and size
-        current_pos = await self.current_file_handle.tell()
-        await self.current_file_handle.seek(0, 2)  # Seek to end
-        file_size = await self.current_file_handle.tell()
-        await self.current_file_handle.seek(current_pos)  # Restore position
-        
-        new_data_bytes = file_size - current_pos
-        logger.info(f"File position: {current_pos}, file size: {file_size}, new data: {new_data_bytes} bytes")
+        try:
+            # Check file position and size
+            current_pos = await self.current_file_handle.tell()
+            logger.info(f"Current file position: {current_pos}")
+            
+            await self.current_file_handle.seek(0, 2)  # Seek to end
+            file_size = await self.current_file_handle.tell()
+            logger.info(f"File size from seek: {file_size}")
+            
+            await self.current_file_handle.seek(current_pos)  # Restore position
+            logger.info(f"Restored position to: {current_pos}")
+            
+            new_data_bytes = file_size - current_pos
+            logger.info(f"File position: {current_pos}, file size: {file_size}, new data: {new_data_bytes} bytes")
+        except Exception as e:
+            logger.error(f"Error checking file position: {e}")
+            return
         
         if new_data_bytes == 0:
             logger.info("No new data available, file not growing")
