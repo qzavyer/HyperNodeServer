@@ -168,25 +168,25 @@ async def update_symbols_async(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update symbols: {str(e)}")
 
-@router.get("/debug/filewatcher")
-async def debug_filewatcher() -> Dict[str, Any]:
-    """Debug endpoint for FileWatcher status and diagnostics."""
+@router.get("/debug/single-file-tail")
+async def debug_single_file_tail() -> Dict[str, Any]:
+    """Debug endpoint for SingleFileTailWatcher status and diagnostics."""
     try:
         # Import here to avoid circular imports
         import src.main
         
-        file_watcher = src.main.file_watcher
-        if file_watcher is None:
-            raise HTTPException(status_code=500, detail="FileWatcher not initialized")
+        single_file_tail_watcher = src.main.single_file_tail_watcher
+        if single_file_tail_watcher is None:
+            raise HTTPException(status_code=500, detail="SingleFileTailWatcher not initialized")
         
         # Get basic status
-        status = file_watcher.get_processing_status()
+        status = single_file_tail_watcher.get_status()
         
         # Get detailed diagnostics
-        logs_path = file_watcher.logs_path
+        logs_path = single_file_tail_watcher.logs_path
         hourly_path = logs_path / "node_order_statuses" / "hourly"
         
-        # Count log files (numeric names or .json)
+        # Count log files (numeric names)
         log_files = []
         total_size = 0
         if hourly_path.exists():

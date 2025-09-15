@@ -173,7 +173,7 @@ class LogParser:
             self.logger.error(f"Error in timeout parsing: {e}")
             raise
     
-    def _parse_line(self, line: str) -> Optional['Order']:
+    def parse_line(self, line: str) -> Optional['Order']:
         """Parse single log line.
         
         Args:
@@ -188,6 +188,17 @@ class LogParser:
         except json.JSONDecodeError as e:
             self.logger.debug(f"Invalid JSON in line: {line[:100]}...")
             return None
+    
+    def _parse_line(self, line: str) -> Optional['Order']:
+        """Parse single log line (private method for internal use).
+        
+        Args:
+            line: Raw log line
+            
+        Returns:
+            Order object if valid, None otherwise
+        """
+        return self.parse_line(line)
     
     def _extract_order(self, data: Dict[str, Any]) -> Optional['Order']:
         """Extract order from parsed JSON data.

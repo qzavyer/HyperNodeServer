@@ -14,9 +14,7 @@ from src.api.health_routes import router as health_router
 from src.storage.file_storage import FileStorage
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
-from src.watcher.file_watcher import FileWatcher
 from src.watcher.single_file_tail_watcher import SingleFileTailWatcher
-from src.watcher.hybrid_manager import HybridManager
 from src.websocket.websocket_manager import WebSocketManager
 from src.notifications.order_notifier import OrderNotifier
 from src.cleanup.directory_cleaner import DirectoryCleaner
@@ -115,9 +113,7 @@ config_manager = ConfigManager()
 websocket_manager = WebSocketManager()
 order_notifier = OrderNotifier(websocket_manager, config_manager)
 order_manager = OrderManager(file_storage, config_manager, order_notifier)
-file_watcher = FileWatcher(order_manager)
 single_file_tail_watcher = SingleFileTailWatcher(order_manager)
-hybrid_manager = HybridManager(file_watcher, order_manager)
 directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH, single_file_tail_watcher)
 node_health_monitor = None  # Will be initialized in startup_event
 
@@ -157,9 +153,6 @@ async def startup_event():
         else:
             logger.info("Single file tail watcher disabled in settings")
         
-        # Start hybrid manager (includes both legacy and realtime watchers)
-        await hybrid_manager.start_async()
-        
         # Start directory cleaner
         asyncio.create_task(directory_cleaner.start_periodic_cleanup_async())
         logger.info("✅ Directory cleaner started successfully")
@@ -175,9 +168,6 @@ async def shutdown_event():
         # Stop single file tail watcher
         if settings.SINGLE_FILE_TAIL_ENABLED:
             await single_file_tail_watcher.stop_async()
-        
-        # Stop hybrid manager
-        await hybrid_manager.stop_async()
         
         # Stop WebSocket manager
         await websocket_manager.stop()
@@ -214,7 +204,6 @@ async def performance_info():
     """Performance information endpoint."""
     return {
         "single_file_tail_watcher": single_file_tail_watcher.get_status() if settings.SINGLE_FILE_TAIL_ENABLED else {"enabled": False},
-        "hybrid_manager_stats": hybrid_manager.get_stats(),
         "websocket_status": websocket_manager.get_connection_stats(),
         "notifications": order_notifier.get_notification_stats(),
         "memory_usage": {
@@ -234,32 +223,19 @@ async def performance_info():
 
 @app.get("/metrics/realtime")
 async def realtime_metrics():
-    """Real-time processing metrics for Iteration 1."""
-    stats = hybrid_manager.get_stats()
+    """Real-time processing metrics."""
     return {
-        "iteration": "1 - Real-time Tail Reader",
-        "processing_streams": {
-            "realtime": {
-                "enabled": stats["realtime_enabled"],
-                "orders_processed": stats["realtime_orders_processed"],
-                "watcher_stats": stats["realtime_watcher_stats"]
-            },
-            "legacy": {
-                "enabled": stats["legacy_enabled"], 
-                "orders_processed": stats["legacy_orders_processed"],
-                "watcher_stats": stats["file_watcher_stats"]
-            }
+        "iteration": "1 - Single File Tail Reader",
+        "single_file_tail_watcher": single_file_tail_watcher.get_status() if settings.SINGLE_FILE_TAIL_ENABLED else {"enabled": False},
+        "processing": {
+            "enabled": settings.SINGLE_FILE_TAIL_ENABLED,
+            "current_file": single_file_tail_watcher.get_status().get("current_file") if settings.SINGLE_FILE_TAIL_ENABLED else None,
+            "is_running": single_file_tail_watcher.get_status().get("is_running", False) if settings.SINGLE_FILE_TAIL_ENABLED else False
         },
-        "deduplication": {
-            "cache_size": stats["dedup_cache_size"],
-            "duplicates_filtered": stats["duplicate_orders_filtered"],
-            "efficiency": round(
-                (stats["duplicate_orders_filtered"] / max(stats["total_orders_processed"], 1)) * 100, 2
-            )
-        },
-        "total_processing": {
-            "orders_processed": stats["total_orders_processed"],
-            "running": stats["running"]
+        "settings": {
+            "single_file_tail_enabled": settings.SINGLE_FILE_TAIL_ENABLED,
+            "fallback_scan_interval_sec": settings.FALLBACK_SCAN_INTERVAL_SEC,
+            "tail_readline_interval_ms": settings.TAIL_READLINE_INTERVAL_MS
         }
     }
 

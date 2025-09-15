@@ -82,6 +82,9 @@ def setup_logger(
         print(f"⚠️ Failed to setup file logging: {e}")
         print("📝 Falling back to stdout logging")
         
+        # Clear any handlers that might have been added before the exception
+        logger.handlers.clear()
+        
         # Create stdout handler
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setLevel(getattr(logging, log_level.upper()))

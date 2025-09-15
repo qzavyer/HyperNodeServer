@@ -246,13 +246,13 @@ class SingleFileTailWatcher:
     async def _process_line(self, line: str) -> None:
         """Processes a single line from the file."""
         try:
-            # Parse the line as an order
-            orders = self.parser.parse_line(line)
+            # Parse the line as an order using public method
+            order = self.parser.parse_line(line)
             
-            if orders:
-                # Process valid orders
-                await self.order_manager.update_orders_batch_async(orders)
-                logger.debug(f"Processed {len(orders)} orders from line")
+            if order:
+                # Process valid order
+                await self.order_manager.update_orders_batch_async([order])
+                logger.debug(f"Processed order from line")
             else:
                 # Invalid order, log as error and skip
                 logger.error(f"Invalid order format, skipping line: {line[:100]}...")

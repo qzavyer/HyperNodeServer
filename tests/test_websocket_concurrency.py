@@ -43,7 +43,7 @@ def sample_order():
     return Order(
         id="test_order_123",
         symbol="BTC",
-        side="buy",
+        side="Bid",
         price=50000.0,
         size=1.0,
         status="open",
@@ -114,7 +114,7 @@ async def test_concurrent_broadcast_with_disconnects(websocket_manager, sample_o
             order = Order(
                 id=f"order_{i}",
                 symbol="BTC",
-                side="buy",
+                side="Bid",
                 price=50000.0 + i,
                 size=1.0,
                 status="open",
@@ -241,7 +241,7 @@ async def test_set_iteration_safety():
             order = Order(
                 id=f"iter_order_{i}",
                 symbol="BTC",
-                side="buy",
+                side="Bid",
                 price=50000.0,
                 size=1.0,
                 status="open",

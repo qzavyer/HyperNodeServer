@@ -14,7 +14,7 @@ from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.parser.log_parser import LogParser
 from src.parser.order_extractor import OrderExtractor
-from src.watcher.file_watcher import FileWatcher
+from src.watcher.single_file_tail_watcher import SingleFileTailWatcher
 from src.storage.models import Order, Config, SymbolConfig
 
 @pytest.fixture
