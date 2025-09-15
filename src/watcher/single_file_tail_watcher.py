@@ -113,8 +113,22 @@ class SingleFileTailWatcher:
         
         # Aggressive mode settings
         if self.aggressive_polling:
-            self.tail_interval = 0.001  # 1ms polling in aggressive mode
-            self.batch_timeout_ms = 1   # 1ms batch timeout in aggressive mode
+            self.tail_interval = 0.0001  # 0.1ms polling in aggressive mode
+            self.batch_timeout_ms = 0.1   # 0.1ms batch timeout in aggressive mode
+        
+        # Ultra-fast mode settings
+        if settings.TAIL_ULTRA_FAST_MODE:
+            self.tail_interval = 0.00001  # 0.01ms polling in ultra-fast mode
+            self.batch_timeout_ms = 0.01   # 0.01ms batch timeout in ultra-fast mode
+            self.batch_size = settings.TAIL_MAX_BATCH_SIZE  # Use max batch size
+        
+        # Emergency mode settings (maximum speed)
+        if settings.TAIL_EMERGENCY_MODE:
+            self.tail_interval = 0.000001  # 0.001ms polling in emergency mode
+            self.batch_timeout_ms = 0.001   # 0.001ms batch timeout in emergency mode
+            self.batch_size = settings.TAIL_MAX_BATCH_SIZE  # Use max batch size
+            self.parallel_workers = 16  # Maximum parallel workers
+            self.parallel_batch_size = 500  # Maximum parallel batch size
         
         # Performance counters
         self.total_lines_processed = 0
@@ -299,7 +313,12 @@ class SingleFileTailWatcher:
                     # No file to tail, try to find one
                     await self._find_and_start_current_file()
                 
-                await asyncio.sleep(self.tail_interval)
+                # Always yield control to event loop, but with minimal delay in aggressive modes
+                if settings.TAIL_NO_SLEEP_MODE or settings.TAIL_CONTINUOUS_POLLING:
+                    # Yield control to event loop without delay
+                    await asyncio.sleep(0)  # Yield to event loop
+                else:
+                    await asyncio.sleep(self.tail_interval)
                 
             except Exception as e:
                 logger.error(f"Error in tail loop: {e}")
@@ -452,7 +471,11 @@ class SingleFileTailWatcher:
                     
                     # Small delay to prevent overwhelming the system
                     if self.stream_processing_delay > 0:
-                        await asyncio.sleep(self.stream_processing_delay)
+                        if settings.TAIL_NO_SLEEP_MODE:
+                            # Yield control to event loop without delay
+                            await asyncio.sleep(0)  # Yield to event loop
+                        else:
+                            await asyncio.sleep(self.stream_processing_delay)
                         
         except Exception as e:
             logger.error(f"Error in streaming reading: {e}")

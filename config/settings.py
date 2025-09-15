@@ -33,33 +33,42 @@ class Settings(BaseSettings):
     # Single file tail watcher settings
     SINGLE_FILE_TAIL_ENABLED: bool = True  # Enable single file tail approach
     FALLBACK_SCAN_INTERVAL_SEC: int = 600  # Fallback scan interval (10 minutes)
-    TAIL_READLINE_INTERVAL_MS: float = 0.01  # Ultra-fast polling (10ms)
-    TAIL_BATCH_SIZE: int = 50  # Process multiple lines at once
-    TAIL_BUFFER_SIZE: int = 8192  # Larger buffer for faster reading
+    TAIL_READLINE_INTERVAL_MS: float = 0.001  # Ultra-fast polling (1ms)
+    TAIL_BATCH_SIZE: int = 100  # Process more lines at once
+    TAIL_BUFFER_SIZE: int = 16384  # Larger buffer for faster reading (16KB)
     TAIL_AGGRESSIVE_POLLING: bool = True  # Enable aggressive polling for maximum speed
     
     # Parallel processing settings
-    TAIL_PARALLEL_WORKERS: int = 4  # Number of parallel workers for parsing
-    TAIL_PARALLEL_BATCH_SIZE: int = 100  # Batch size for parallel processing
+    TAIL_PARALLEL_WORKERS: int = 8  # Number of parallel workers for parsing
+    TAIL_PARALLEL_BATCH_SIZE: int = 200  # Batch size for parallel processing
     TAIL_JSON_OPTIMIZATION: bool = True  # Enable JSON parsing optimization
     TAIL_PRE_FILTER: bool = True  # Enable pre-filtering of lines before parsing
     
     # Revolutionary memory-mapped processing
     TAIL_MEMORY_MAPPED: bool = True  # Enable memory-mapped file processing
-    TAIL_MMAP_CHUNK_SIZE: int = 1024 * 1024  # 1MB chunks for memory mapping
+    TAIL_MMAP_CHUNK_SIZE: int = 2 * 1024 * 1024  # 2MB chunks for memory mapping
     TAIL_ZERO_COPY: bool = True  # Enable zero-copy string processing
     TAIL_LOCK_FREE: bool = True  # Enable lock-free concurrent processing
     
     # Streaming processing for maximum speed
     TAIL_STREAMING: bool = True  # Enable streaming processing
-    TAIL_STREAM_BUFFER_SIZE: int = 64 * 1024  # 64KB stream buffer
-    TAIL_STREAM_CHUNK_SIZE: int = 16 * 1024  # 16KB chunks
-    TAIL_STREAM_PROCESSING_DELAY_MS: float = 0.001  # 1ms delay between chunks
+    TAIL_STREAM_BUFFER_SIZE: int = 128 * 1024  # 128KB stream buffer
+    TAIL_STREAM_CHUNK_SIZE: int = 32 * 1024  # 32KB chunks
+    TAIL_STREAM_PROCESSING_DELAY_MS: float = 0.0001  # 0.1ms delay between chunks
+    
+    # Ultra-aggressive processing settings
+    TAIL_ULTRA_FAST_MODE: bool = True  # Enable ultra-fast mode
+    TAIL_NO_SLEEP_MODE: bool = True  # Disable all sleep delays
+    TAIL_CONTINUOUS_POLLING: bool = True  # Continuous polling without breaks
+    TAIL_MAX_BATCH_SIZE: int = 500  # Maximum batch size for processing
+    TAIL_EMERGENCY_MODE: bool = True  # Emergency mode for maximum speed
     
     # WebSocket settings
     WEBSOCKET_PING_INTERVAL: int = 20  # Ping interval in seconds
     WEBSOCKET_PING_TIMEOUT: int = 20   # Ping timeout in seconds
     WEBSOCKET_CLOSE_TIMEOUT: int = 10  # Close timeout in seconds
+    WEBSOCKET_BATCH_SIZE: int = 100  # Batch size for WebSocket messages
+    WEBSOCKET_BATCH_DELAY_MS: float = 0.001  # Delay between WebSocket batches
     
     # API settings
     API_HOST: str = "0.0.0.0"

@@ -51,10 +51,6 @@ class OrderExtractor:
             ]
 
             if status in not_created_statuses:
-                if status == "scheduledCancel":
-                    self.logger.info(f"Scheduled cancel: {log_entry}")
-                else:
-                    self.logger.info(f"Not created status: {status}")
                 return None
 
             if status not in ["filled", "triggered", "open", "canceled"]:
