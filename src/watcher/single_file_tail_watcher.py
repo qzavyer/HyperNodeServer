@@ -255,10 +255,10 @@ class SingleFileTailWatcher:
                 logger.debug(f"Processed order from line")
             else:
                 # Invalid order, log as error and skip
-                logger.error(f"Invalid order format, skipping line: {line[:100]}...")
+                logger.error(f"Invalid order format, skipping line: {line}")
                 
         except Exception as e:
-            logger.error(f"Error processing line: {e}, line: {line[:100]}...")
+            logger.error(f"Error processing line: {e}, line: {line}")
     
     async def _start_watchdog(self) -> None:
         """Starts watchdog for monitoring new file creation."""
