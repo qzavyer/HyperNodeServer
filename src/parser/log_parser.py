@@ -211,3 +211,14 @@ class LogParser:
         """
         extractor = OrderExtractor()
         return extractor.extract_order(data)
+    
+    def _create_order_from_data(self, data: Dict[str, Any]) -> Optional['Order']:
+        """Create order from cached JSON data (optimized version).
+        
+        Args:
+            data: Cached JSON data
+            
+        Returns:
+            Order object if valid data, None otherwise
+        """
+        return self._extract_order(data)

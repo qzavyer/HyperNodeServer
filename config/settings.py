@@ -33,7 +33,16 @@ class Settings(BaseSettings):
     # Single file tail watcher settings
     SINGLE_FILE_TAIL_ENABLED: bool = True  # Enable single file tail approach
     FALLBACK_SCAN_INTERVAL_SEC: int = 600  # Fallback scan interval (10 minutes)
-    TAIL_READLINE_INTERVAL_MS: float = 0.1  # Interval between readline() calls (100ms)
+    TAIL_READLINE_INTERVAL_MS: float = 0.01  # Ultra-fast polling (10ms)
+    TAIL_BATCH_SIZE: int = 50  # Process multiple lines at once
+    TAIL_BUFFER_SIZE: int = 8192  # Larger buffer for faster reading
+    TAIL_AGGRESSIVE_POLLING: bool = True  # Enable aggressive polling for maximum speed
+    
+    # Parallel processing settings
+    TAIL_PARALLEL_WORKERS: int = 4  # Number of parallel workers for parsing
+    TAIL_PARALLEL_BATCH_SIZE: int = 100  # Batch size for parallel processing
+    TAIL_JSON_OPTIMIZATION: bool = True  # Enable JSON parsing optimization
+    TAIL_PRE_FILTER: bool = True  # Enable pre-filtering of lines before parsing
     
     # WebSocket settings
     WEBSOCKET_PING_INTERVAL: int = 20  # Ping interval in seconds

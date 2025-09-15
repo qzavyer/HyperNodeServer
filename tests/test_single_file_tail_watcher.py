@@ -239,7 +239,55 @@ class TestSingleFileTailWatcher:
         assert status["current_position"] == 12345
         assert status["tail_interval_ms"] == 100
         assert status["fallback_interval_sec"] == 60
+        assert "parallel_workers" in status
+        assert "json_optimization" in status
+        assert "pre_filter" in status
+        assert "cache_hits" in status
+        assert "cache_misses" in status
         assert "watchdog_active" in status
+
+    def test_pre_filter_line_valid(self, watcher):
+        """Test pre-filtering with valid line."""
+        valid_line = '{"time":"2025-01-01T00:00:00","user":"0x123","order":{"coin":"BTC","side":"B","status":"open"}}'
+        result = watcher._pre_filter_line(valid_line)
+        assert result is True
+        assert watcher.pre_filter_passed == 1
+
+    def test_pre_filter_line_invalid(self, watcher):
+        """Test pre-filtering with invalid line."""
+        invalid_line = "This is not a JSON line"
+        result = watcher._pre_filter_line(invalid_line)
+        assert result is False
+        assert watcher.pre_filter_rejected == 1
+
+    def test_pre_filter_line_empty(self, watcher):
+        """Test pre-filtering with empty line."""
+        result = watcher._pre_filter_line("")
+        assert result is False
+        assert watcher.pre_filter_rejected == 1
+
+    def test_parse_line_optimized_with_cache(self, watcher):
+        """Test optimized parsing with caching."""
+        line = '{"time":"2025-01-01T00:00:00","user":"0x1234567890abcdef","order":{"coin":"BTC","side":"B","sz":"1.0","limitPx":"50000","oid":123,"status":"open"}}'
+        
+        # First parse - should cache
+        order1 = watcher._parse_line_optimized(line)
+        
+        # Second parse - should use cache
+        order2 = watcher._parse_line_optimized(line)
+        
+        assert watcher.cache_hits == 1
+        assert watcher.cache_misses == 1
+
+    def test_parse_chunk_sync(self, watcher):
+        """Test synchronous chunk parsing."""
+        lines = [
+            '{"time":"2025-01-01T00:00:00","user":"0x1234567890abcdef","order":{"coin":"BTC","side":"B","sz":"1.0","limitPx":"50000","oid":123,"status":"open"}}',
+            '{"time":"2025-01-01T00:00:01","user":"0x1234567890abcdef","order":{"coin":"ETH","side":"A","sz":"10.0","limitPx":"3000","oid":124,"status":"open"}}'
+        ]
+        
+        orders = watcher._parse_chunk_sync(lines)
+        assert len(orders) == 2
 
 
 class TestSingleFileEventHandler:
