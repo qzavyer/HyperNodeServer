@@ -408,7 +408,13 @@ class SingleFileTailWatcher:
         logger.info("_read_traditional_lines() called")
         lines_read = 0
         
+        # Check if file handle is valid
+        if not self.current_file_handle:
+            logger.error("No file handle available in _read_traditional_lines")
+            return
+        
         try:
+            logger.info("About to call tell() on file handle")
             # Check file position and size
             current_pos = await self.current_file_handle.tell()
             logger.info(f"Current file position: {current_pos}")
