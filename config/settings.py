@@ -30,31 +30,31 @@ class Settings(BaseSettings):
     BATCH_PROCESSING_DELAY_MS: float = 0.001  # Minimal delay between batches (1ms)
     PERIODIC_SCAN_INTERVAL_SEC: int = 1  # Scan interval for real-time data (1 second)
     
-    # Single file tail watcher settings
+    # Single file tail watcher settings - optimized for HyperLiquid node coexistence
     SINGLE_FILE_TAIL_ENABLED: bool = True  # Enable single file tail approach
-    FALLBACK_SCAN_INTERVAL_SEC: int = 600  # Fallback scan interval (10 minutes)
-    TAIL_READLINE_INTERVAL_MS: float = 10.0  # Balanced polling (10ms)
-    TAIL_BATCH_SIZE: int = 20  # Process fewer lines at once
-    TAIL_BUFFER_SIZE: int = 16384  # Larger buffer for faster reading (16KB)
-    TAIL_AGGRESSIVE_POLLING: bool = True  # Enable aggressive polling for maximum speed
+    FALLBACK_SCAN_INTERVAL_SEC: int = 300  # Fallback scan interval (5 minutes) - reduced
+    TAIL_READLINE_INTERVAL_MS: float = 100.0  # Conservative polling (100ms) - increased
+    TAIL_BATCH_SIZE: int = 5  # Very small batches to reduce CPU spikes
+    TAIL_BUFFER_SIZE: int = 8192  # Smaller buffer (8KB) to reduce memory usage
+    TAIL_AGGRESSIVE_POLLING: bool = False  # Disable aggressive polling for stability
     
-    # Parallel processing settings
-    TAIL_PARALLEL_WORKERS: int = 2  # Number of parallel workers for parsing
-    TAIL_PARALLEL_BATCH_SIZE: int = 200  # Batch size for parallel processing
+    # Parallel processing settings - conservative for HyperLiquid node coexistence
+    TAIL_PARALLEL_WORKERS: int = 1  # Single worker to reduce CPU contention
+    TAIL_PARALLEL_BATCH_SIZE: int = 50  # Smaller batches to reduce memory spikes
     TAIL_JSON_OPTIMIZATION: bool = True  # Enable JSON parsing optimization
     TAIL_PRE_FILTER: bool = True  # Enable pre-filtering of lines before parsing
     
-    # Revolutionary memory-mapped processing
-    TAIL_MEMORY_MAPPED: bool = True  # Enable memory-mapped file processing
-    TAIL_MMAP_CHUNK_SIZE: int = 2 * 1024 * 1024  # 2MB chunks for memory mapping
-    TAIL_ZERO_COPY: bool = True  # Enable zero-copy string processing
-    TAIL_LOCK_FREE: bool = True  # Enable lock-free concurrent processing
+    # Revolutionary memory-mapped processing - conservative settings
+    TAIL_MEMORY_MAPPED: bool = False  # Disable memory mapping to reduce memory usage
+    TAIL_MMAP_CHUNK_SIZE: int = 512 * 1024  # 512KB chunks if enabled
+    TAIL_ZERO_COPY: bool = False  # Disable zero-copy to reduce complexity
+    TAIL_LOCK_FREE: bool = False  # Disable lock-free processing for stability
     
-    # Streaming processing for maximum speed
-    TAIL_STREAMING: bool = True  # Enable streaming processing
-    TAIL_STREAM_BUFFER_SIZE: int = 128 * 1024  # 128KB stream buffer
-    TAIL_STREAM_CHUNK_SIZE: int = 32 * 1024  # 32KB chunks
-    TAIL_STREAM_PROCESSING_DELAY_MS: float = 1.0  # 1ms delay between chunks
+    # Streaming processing - conservative settings
+    TAIL_STREAMING: bool = False  # Disable streaming to reduce complexity
+    TAIL_STREAM_BUFFER_SIZE: int = 32 * 1024  # 32KB stream buffer if enabled
+    TAIL_STREAM_CHUNK_SIZE: int = 8 * 1024  # 8KB chunks if enabled
+    TAIL_STREAM_PROCESSING_DELAY_MS: float = 10.0  # 10ms delay between chunks
     
     # Ultra-aggressive processing settings
     TAIL_ULTRA_FAST_MODE: bool = False  # Enable ultra-fast mode
@@ -63,19 +63,19 @@ class Settings(BaseSettings):
     TAIL_MAX_BATCH_SIZE: int = 500  # Maximum batch size for processing
     TAIL_EMERGENCY_MODE: bool = False  # Emergency mode for maximum speed
     
-    # Python optimization settings
+    # Python optimization settings - conservative for HyperLiquid node coexistence
     PYTHON_OPTIMIZATION: bool = True  # Enable Python-specific optimizations
     USE_LRU_CACHE: bool = True  # Enable LRU caching for frequently used functions
-    CACHE_SIZE: int = 1000  # Size of LRU cache
-    ENABLE_CONCURRENT_FUTURES: bool = True  # Use concurrent.futures for CPU tasks
-    MAX_WORKERS_AUTO: bool = True  # Automatically set max workers based on CPU count
+    CACHE_SIZE: int = 100  # Smaller cache size to reduce memory usage
+    ENABLE_CONCURRENT_FUTURES: bool = False  # Disable concurrent.futures to reduce CPU contention
+    MAX_WORKERS_AUTO: bool = False  # Use fixed number of workers
     
-    # WebSocket settings
-    WEBSOCKET_PING_INTERVAL: int = 20  # Ping interval in seconds
-    WEBSOCKET_PING_TIMEOUT: int = 20   # Ping timeout in seconds
-    WEBSOCKET_CLOSE_TIMEOUT: int = 10  # Close timeout in seconds
-    WEBSOCKET_BATCH_SIZE: int = 100  # Batch size for WebSocket messages
-    WEBSOCKET_BATCH_DELAY_MS: float = 0.001  # Delay between WebSocket batches
+    # WebSocket settings - conservative for stability
+    WEBSOCKET_PING_INTERVAL: int = 30  # Increased ping interval (30 seconds)
+    WEBSOCKET_PING_TIMEOUT: int = 30   # Increased ping timeout (30 seconds)
+    WEBSOCKET_CLOSE_TIMEOUT: int = 15  # Increased close timeout (15 seconds)
+    WEBSOCKET_BATCH_SIZE: int = 10  # Smaller batch size to reduce memory spikes
+    WEBSOCKET_BATCH_DELAY_MS: float = 10.0  # Increased delay between WebSocket batches
     
     # API settings
     API_HOST: str = "0.0.0.0"
