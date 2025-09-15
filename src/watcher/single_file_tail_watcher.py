@@ -253,9 +253,6 @@ class SingleFileTailWatcher:
                 # Process valid order
                 await self.order_manager.update_orders_batch_async([order])
                 logger.debug(f"Processed order from line")
-            else:
-                # Invalid order, log as error and skip
-                logger.error(f"Invalid order format, skipping line: {line}")
                 
         except Exception as e:
             logger.error(f"Error processing line: {e}, line: {line}")
