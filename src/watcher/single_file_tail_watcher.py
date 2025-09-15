@@ -421,9 +421,11 @@ class SingleFileTailWatcher:
             logger.info(f"File size from os.stat: {file_size}")
             
             # Get current position from our internal tracking
-            if not hasattr(self, 'file_position'):
-                self.file_position = file_size  # Start from end
-                logger.info(f"Initialized file position to: {self.file_position}")
+            if not hasattr(self, 'file_position') or not hasattr(self, 'last_file_path') or self.last_file_path != self.current_file_path:
+                # New file or first time - start from end
+                self.file_position = file_size
+                self.last_file_path = self.current_file_path
+                logger.info(f"New file detected, initialized file position to: {self.file_position}")
             
             current_pos = self.file_position
             new_data_bytes = file_size - current_pos
