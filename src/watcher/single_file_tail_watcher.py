@@ -263,7 +263,7 @@ class SingleFileTailWatcher:
             
             # Find directory with maximum date
             max_date_dir = max(date_dirs, key=lambda d: d.name)
-            logger.debug(f"Found max date directory: {max_date_dir}")
+            logger.info(f"Found max date directory: {max_date_dir}")
             
             # Find all numeric files in the max date directory
             numeric_files = []
@@ -283,7 +283,14 @@ class SingleFileTailWatcher:
             
             # Find file with maximum hour
             max_hour_file = max(numeric_files, key=lambda f: int(f.name))
-            logger.info(f"Found current file: {max_hour_file} (date: {max_date_dir.name}, hour: {max_hour_file.name})")
+            
+            # Log detailed file info
+            try:
+                file_stat = max_hour_file.stat()
+                logger.info(f"Found current file: {max_hour_file.name} (date: {max_date_dir.name}, hour: {max_hour_file.name})")
+                logger.info(f"File size: {file_stat.st_size} bytes, modified: {file_stat.st_mtime}")
+            except Exception as e:
+                logger.warning(f"Could not get file stats for {max_hour_file}: {e}")
             
             return max_hour_file
             
@@ -320,12 +327,17 @@ class SingleFileTailWatcher:
     async def _tail_loop(self) -> None:
         """Main tail monitoring loop using readline approach."""
         logger.info("Tail loop started")
+        loop_count = 0
         
         # Use asyncio.create_task for concurrent operations
         tasks = []
         
         while self.is_running:
             try:
+                loop_count += 1
+                if loop_count % 100 == 0:  # Log every 100 iterations
+                    logger.info(f"Tail loop iteration {loop_count}, running: {self.is_running}")
+                
                 # Create concurrent tasks
                 if self.current_file_handle:
                     # Process file reading and order processing concurrently
@@ -368,6 +380,14 @@ class SingleFileTailWatcher:
                 logger.info("No file handle available for reading")
                 return
             
+            # Log current file info
+            if self.current_file_path:
+                try:
+                    file_stat = self.current_file_path.stat()
+                    logger.info(f"Reading file: {self.current_file_path.name}, size: {file_stat.st_size} bytes, modified: {file_stat.st_mtime}")
+                except Exception as e:
+                    logger.warning(f"Could not get file stats: {e}")
+            
             # Use revolutionary approach based on settings
             if self.streaming:
                 logger.info("Using streaming approach")
@@ -393,7 +413,12 @@ class SingleFileTailWatcher:
         file_size = await self.current_file_handle.tell()
         await self.current_file_handle.seek(current_pos)  # Restore position
         
-        logger.info(f"File position: {current_pos}, file size: {file_size}, new data: {file_size - current_pos} bytes")
+        new_data_bytes = file_size - current_pos
+        logger.info(f"File position: {current_pos}, file size: {file_size}, new data: {new_data_bytes} bytes")
+        
+        if new_data_bytes == 0:
+            logger.info("No new data available, file not growing")
+            return
         
         # Read only new lines (non-blocking)
         while True:
@@ -401,6 +426,8 @@ class SingleFileTailWatcher:
             if not line:  # EOF - no new data
                 if lines_read > 0:
                     logger.info(f"EOF reached, read {lines_read} lines")
+                else:
+                    logger.info("EOF reached, no new lines found")
                 break
             
             line = line.strip()
