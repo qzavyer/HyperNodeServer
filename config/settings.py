@@ -33,13 +33,13 @@ class Settings(BaseSettings):
     # Single file tail watcher settings
     SINGLE_FILE_TAIL_ENABLED: bool = True  # Enable single file tail approach
     FALLBACK_SCAN_INTERVAL_SEC: int = 600  # Fallback scan interval (10 minutes)
-    TAIL_READLINE_INTERVAL_MS: float = 0.001  # Ultra-fast polling (1ms)
-    TAIL_BATCH_SIZE: int = 100  # Process more lines at once
+    TAIL_READLINE_INTERVAL_MS: float = 10.0  # Balanced polling (10ms)
+    TAIL_BATCH_SIZE: int = 20  # Process fewer lines at once
     TAIL_BUFFER_SIZE: int = 16384  # Larger buffer for faster reading (16KB)
     TAIL_AGGRESSIVE_POLLING: bool = True  # Enable aggressive polling for maximum speed
     
     # Parallel processing settings
-    TAIL_PARALLEL_WORKERS: int = 8  # Number of parallel workers for parsing
+    TAIL_PARALLEL_WORKERS: int = 2  # Number of parallel workers for parsing
     TAIL_PARALLEL_BATCH_SIZE: int = 200  # Batch size for parallel processing
     TAIL_JSON_OPTIMIZATION: bool = True  # Enable JSON parsing optimization
     TAIL_PRE_FILTER: bool = True  # Enable pre-filtering of lines before parsing
@@ -54,14 +54,21 @@ class Settings(BaseSettings):
     TAIL_STREAMING: bool = True  # Enable streaming processing
     TAIL_STREAM_BUFFER_SIZE: int = 128 * 1024  # 128KB stream buffer
     TAIL_STREAM_CHUNK_SIZE: int = 32 * 1024  # 32KB chunks
-    TAIL_STREAM_PROCESSING_DELAY_MS: float = 0.0001  # 0.1ms delay between chunks
+    TAIL_STREAM_PROCESSING_DELAY_MS: float = 1.0  # 1ms delay between chunks
     
     # Ultra-aggressive processing settings
-    TAIL_ULTRA_FAST_MODE: bool = True  # Enable ultra-fast mode
-    TAIL_NO_SLEEP_MODE: bool = True  # Disable all sleep delays
-    TAIL_CONTINUOUS_POLLING: bool = True  # Continuous polling without breaks
+    TAIL_ULTRA_FAST_MODE: bool = False  # Enable ultra-fast mode
+    TAIL_NO_SLEEP_MODE: bool = False  # Disable all sleep delays
+    TAIL_CONTINUOUS_POLLING: bool = False  # Continuous polling without breaks
     TAIL_MAX_BATCH_SIZE: int = 500  # Maximum batch size for processing
-    TAIL_EMERGENCY_MODE: bool = True  # Emergency mode for maximum speed
+    TAIL_EMERGENCY_MODE: bool = False  # Emergency mode for maximum speed
+    
+    # Python optimization settings
+    PYTHON_OPTIMIZATION: bool = True  # Enable Python-specific optimizations
+    USE_LRU_CACHE: bool = True  # Enable LRU caching for frequently used functions
+    CACHE_SIZE: int = 1000  # Size of LRU cache
+    ENABLE_CONCURRENT_FUTURES: bool = True  # Use concurrent.futures for CPU tasks
+    MAX_WORKERS_AUTO: bool = True  # Automatically set max workers based on CPU count
     
     # WebSocket settings
     WEBSOCKET_PING_INTERVAL: int = 20  # Ping interval in seconds

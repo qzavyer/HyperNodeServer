@@ -10,6 +10,8 @@ import json
 import concurrent.futures
 import mmap
 import threading
+import os
+from functools import lru_cache
 from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent
@@ -68,8 +70,11 @@ class SingleFileTailWatcher:
         self.buffer_size = settings.TAIL_BUFFER_SIZE
         self.aggressive_polling = settings.TAIL_AGGRESSIVE_POLLING
         
-        # Parallel processing settings
-        self.parallel_workers = settings.TAIL_PARALLEL_WORKERS
+        # Parallel processing settings with CPU optimization
+        if settings.MAX_WORKERS_AUTO:
+            self.parallel_workers = min(settings.TAIL_PARALLEL_WORKERS, os.cpu_count() or 4)
+        else:
+            self.parallel_workers = settings.TAIL_PARALLEL_WORKERS
         self.parallel_batch_size = settings.TAIL_PARALLEL_BATCH_SIZE
         self.json_optimization = settings.TAIL_JSON_OPTIMIZATION
         self.pre_filter = settings.TAIL_PRE_FILTER
@@ -99,12 +104,15 @@ class SingleFileTailWatcher:
         self.stream_buffer = bytearray()
         self.stream_position = 0
         
-        # Pre-filtering patterns for fast line validation
+        # Pre-filtering patterns for fast line validation (compiled once)
         self.valid_line_patterns = [
             re.compile(r'^\s*\{.*\}\s*$'),  # JSON object
             re.compile(r'"order"'),  # Contains order field
             re.compile(r'"status"'),  # Contains status field
         ]
+        
+        # Cache for compiled regex patterns
+        self._pattern_cache = {}
         
         # Batch processing
         self.line_buffer = []
@@ -135,10 +143,11 @@ class SingleFileTailWatcher:
         self.total_orders_processed = 0
         self.last_performance_log = 0
         
-        # JSON optimization cache
+        # JSON optimization cache with size limit
         self.json_cache = {}
         self.cache_hits = 0
         self.cache_misses = 0
+        self.max_cache_size = 10000  # Limit cache size to prevent memory issues
         
         # Pre-filtering counters
         self.pre_filter_passed = 0
@@ -305,20 +314,34 @@ class SingleFileTailWatcher:
         """Main tail monitoring loop using readline approach."""
         logger.info("Tail loop started")
         
+        # Use asyncio.create_task for concurrent operations
+        tasks = []
+        
         while self.is_running:
             try:
+                # Create concurrent tasks
                 if self.current_file_handle:
-                    await self._read_new_lines()
+                    # Process file reading and order processing concurrently
+                    read_task = asyncio.create_task(self._read_new_lines())
+                    tasks.append(read_task)
                 else:
-                    # No file to tail, try to find one
-                    await self._find_and_start_current_file()
+                    # Find new file
+                    find_task = asyncio.create_task(self._find_and_start_current_file())
+                    tasks.append(find_task)
                 
-                # Always yield control to event loop, but with minimal delay in aggressive modes
-                if settings.TAIL_NO_SLEEP_MODE or settings.TAIL_CONTINUOUS_POLLING:
-                    # Yield control to event loop without delay
-                    await asyncio.sleep(0)  # Yield to event loop
-                else:
-                    await asyncio.sleep(self.tail_interval)
+                # Wait for tasks with timeout to prevent blocking
+                if tasks:
+                    done, pending = await asyncio.wait(tasks, timeout=0.01, return_when=asyncio.FIRST_COMPLETED)
+                    
+                    # Cancel pending tasks
+                    for task in pending:
+                        task.cancel()
+                    
+                    # Clear completed tasks
+                    tasks = list(pending)
+                
+                # Always yield control to event loop
+                await asyncio.sleep(self.tail_interval)
                 
             except Exception as e:
                 logger.error(f"Error in tail loop: {e}")
@@ -596,8 +619,9 @@ class SingleFileTailWatcher:
                 orders.append(order)
         return orders
     
+    @lru_cache(maxsize=1000)
     def _pre_filter_line(self, line: str) -> bool:
-        """Fast pre-filtering to reject obviously invalid lines."""
+        """Fast pre-filtering to reject obviously invalid lines with caching."""
         if not self.pre_filter:
             return True
             

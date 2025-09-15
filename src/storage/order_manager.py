@@ -144,10 +144,6 @@ class OrderManager:
             # Filter orders based on configuration
             filtered_orders = [order for order in orders if self._should_process_order(order)]
             
-            filtered_count = len(orders) - len(filtered_orders)
-            if filtered_count > 0:
-                self.logger.info(f"Filtered out {filtered_count} orders by configuration rules (processed {len(filtered_orders)}/{len(orders)})")
-            
             # Log all orders that passed filtering and are sent to WebSocket
             for order in filtered_orders:
                 liquidity = order.price * order.size
