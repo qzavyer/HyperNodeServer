@@ -563,7 +563,7 @@ class SingleFileTailWatcher:
             if orders:
                 await self.order_manager.update_orders_batch_async(orders)
                 self.total_orders_processed += len(orders)
-                logger.debug(f"Processed batch of {len(orders)} orders")
+                logger.info(f"Processed batch of {len(orders)} orders")
             
             # Update counters
             self.total_lines_processed += len(self.line_buffer)
@@ -706,7 +706,7 @@ class SingleFileTailWatcher:
             if order:
                 # Process valid order
                 await self.order_manager.update_orders_batch_async([order])
-                logger.debug(f"Processed order from line")
+                logger.info(f"Processed order from line")
                 
         except Exception as e:
             logger.error(f"Error processing line: {e}, line: {line}")
