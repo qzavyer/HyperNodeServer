@@ -365,14 +365,18 @@ class SingleFileTailWatcher:
         """Reads new lines using revolutionary memory-mapped approach."""
         try:
             if not self.current_file_handle:
+                logger.info("No file handle available for reading")
                 return
             
             # Use revolutionary approach based on settings
             if self.streaming:
+                logger.info("Using streaming approach")
                 await self._read_streaming_lines()
             elif self.memory_mapped and self.mmap_data:
+                logger.info("Using memory-mapped approach")
                 await self._read_memory_mapped_lines()
             else:
+                logger.info("Using traditional approach")
                 await self._read_traditional_lines()
                         
         except Exception as e:
