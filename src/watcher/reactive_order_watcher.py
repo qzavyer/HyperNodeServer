@@ -319,12 +319,15 @@ class ReactiveOrderWatcher:
             timestamp: Время сигнала в UTC (ISO format)
             tolerance: Допустимое отклонение цены (по умолчанию 0.000001)
         """
+        print(f"DEBUG: add_search_request() called: {ticker} {side} @ {price} at {timestamp}")  # Принудительный вывод
         from datetime import datetime
         
         # Парсим время сигнала
         try:
             signal_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            print(f"DEBUG: Parsed timestamp: {signal_time}")  # Принудительный вывод
         except ValueError:
+            print(f"DEBUG: Invalid timestamp format: {timestamp}")  # Принудительный вывод
             logger.error(f"Invalid timestamp format: {timestamp}")
             return
         
@@ -340,14 +343,17 @@ class ReactiveOrderWatcher:
         
         # Добавляем в активные запросы
         self.active_requests.append(request)
+        print(f"DEBUG: Added request to queue, total: {len(self.active_requests)}")  # Принудительный вывод
         logger.info(f"Added search request: {ticker} {side} @ {price} at {timestamp}")
         
         # Запускаем обработку если еще не запущена
         if not self.processing_task or self.processing_task.done():
+            print("DEBUG: Creating processing task")  # Принудительный вывод
             logger.info(f"Creating processing task for {len(self.active_requests)} active requests")
             self.processing_task = asyncio.create_task(self._process_active_requests())
             logger.info("Processing task created successfully")
         
+        print(f"DEBUG: Search request added successfully, queue size: {len(self.active_requests)}")  # Принудительный вывод
         logger.info(f"Added search request to queue: {len(self.active_requests)} total requests")
     
     async def find_order(self, ticker: str, side: str, price: float, tolerance: float = 0.000001) -> List['Order']:
@@ -640,12 +646,17 @@ class ReactiveOrderWatcher:
                     print("DEBUG: Processing active requests")  # Принудительный вывод
                     # Находим максимальное время среди активных запросов
                     max_time = max(req['timestamp'] for req in self.active_requests)
+                    print(f"DEBUG: Max time: {max_time}")  # Принудительный вывод
                     
                     # Читаем файл до максимального времени
+                    print("DEBUG: Calling _process_file_until_time")  # Принудительный вывод
                     await self._process_file_until_time(max_time)
+                    print("DEBUG: _process_file_until_time completed")  # Принудительный вывод
                     
                     # Обрабатываем все активные запросы
+                    print("DEBUG: Calling _process_requests_batch")  # Принудительный вывод
                     await self._process_requests_batch()
+                    print("DEBUG: _process_requests_batch completed")  # Принудительный вывод
                 else:
                     print("DEBUG: No active requests, waiting...")  # Принудительный вывод
                 
