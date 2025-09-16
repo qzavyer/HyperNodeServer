@@ -339,9 +339,8 @@ class ReactiveOrderWatcher:
         self.active_requests.append(request)
         logger.info(f"Added search request: {ticker} {side} @ {price} at {timestamp}")
         
-        # Запускаем обработку если еще не запущена
-        if not self.processing_task or self.processing_task.done():
-            self.processing_task = asyncio.create_task(self._process_active_requests())
+        # Обработка уже запущена в start_monitoring()
+        logger.info(f"Added search request to queue: {len(self.active_requests)} total requests")
     
     async def find_order(self, ticker: str, side: str, price: float, tolerance: float = 0.000001) -> List['Order']:
         """Найти ордер по критериям.
@@ -624,18 +623,19 @@ class ReactiveOrderWatcher:
         logger.info("Started processing active requests")
         
         try:
-            while self.active_requests:
-                # Находим максимальное время среди активных запросов
-                max_time = max(req['timestamp'] for req in self.active_requests)
+            while True:  # Работаем постоянно
+                if self.active_requests:
+                    # Находим максимальное время среди активных запросов
+                    max_time = max(req['timestamp'] for req in self.active_requests)
+                    
+                    # Читаем файл до максимального времени
+                    await self._process_file_until_time(max_time)
+                    
+                    # Обрабатываем все активные запросы
+                    await self._process_requests_batch()
                 
-                # Читаем файл до максимального времени
-                await self._process_file_until_time(max_time)
-                
-                # Обрабатываем все активные запросы
-                await self._process_requests_batch()
-                
-                # Небольшая пауза перед следующей итерацией
-                await asyncio.sleep(0.1)
+                # Ждем интервал мониторинга
+                await asyncio.sleep(self.monitoring_interval_ms / 1000.0)
                 
         except asyncio.CancelledError:
             logger.info("Active requests processing cancelled")
@@ -877,4 +877,9 @@ class ReactiveOrderWatcher:
         if not self.monitoring_task or self.monitoring_task.done():
             self.monitoring_task = asyncio.create_task(self._monitor_tracked_orders())
             logger.info("Reactive order watcher monitoring started")
+        
+        # Также запускаем обработку активных запросов
+        if not self.processing_task or self.processing_task.done():
+            self.processing_task = asyncio.create_task(self._process_active_requests())
+            logger.info("Reactive order watcher processing started")
 
