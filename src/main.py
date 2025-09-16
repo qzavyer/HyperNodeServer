@@ -14,6 +14,7 @@ from src.api.health_routes import router as health_router
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.watcher.single_file_tail_watcher import SingleFileTailWatcher
+from src.watcher.reactive_order_watcher import ReactiveOrderWatcher
 from src.websocket.websocket_manager import WebSocketManager
 from src.notifications.order_notifier import OrderNotifier
 from src.cleanup.directory_cleaner import DirectoryCleaner
@@ -112,6 +113,7 @@ websocket_manager = WebSocketManager()
 order_notifier = OrderNotifier(websocket_manager, config_manager)
 order_manager = OrderManager(config_manager, order_notifier)
 single_file_tail_watcher = SingleFileTailWatcher(order_manager)
+reactive_order_watcher = ReactiveOrderWatcher(settings.NODE_LOGS_PATH, order_manager, websocket_manager, config_manager)
 directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH, single_file_tail_watcher)
 node_health_monitor = None  # Will be initialized in startup_event
 
@@ -151,6 +153,10 @@ async def startup_event():
         else:
             logger.info("Single file tail watcher disabled in settings")
         
+        # Initialize reactive order watcher
+        await reactive_order_watcher.initialize()
+        logger.info("✅ Reactive order watcher initialized successfully")
+        
         # Start directory cleaner
         asyncio.create_task(directory_cleaner.start_periodic_cleanup_async())
         logger.info("✅ Directory cleaner started successfully")
@@ -166,6 +172,10 @@ async def shutdown_event():
         # Stop single file tail watcher
         if settings.SINGLE_FILE_TAIL_ENABLED:
             await single_file_tail_watcher.stop_async()
+        
+        # Stop reactive order watcher monitoring
+        if reactive_order_watcher.monitoring_task and not reactive_order_watcher.monitoring_task.done():
+            reactive_order_watcher.monitoring_task.cancel()
         
         # Stop WebSocket manager
         await websocket_manager.stop()

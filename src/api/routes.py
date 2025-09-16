@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 from src.storage.models import Order, Config, SymbolConfig
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
+from src.models.reactive_api import OrderSearchRequest, OrderTrackRequest, ReactiveWatcherStatus
 
 router = APIRouter()
 
@@ -312,3 +313,159 @@ async def get_node_health_config(
             status_code=500, 
             detail=f"Failed to get node health configuration: {str(e)}"
         )
+
+# ReactiveOrderWatcher endpoints
+@router.post("/reactive-orders/search")
+async def search_orders_reactive(request: OrderSearchRequest) -> Dict[str, Any]:
+    """Поиск ордеров через ReactiveOrderWatcher.
+    
+    Args:
+        request: Параметры поиска ордеров
+        
+    Returns:
+        Статус поиска (ордера отправляются через WebSocket)
+    """
+    try:
+        # Import here to avoid circular imports
+        import src.main
+        
+        reactive_watcher = src.main.reactive_order_watcher
+        if reactive_watcher is None:
+            raise HTTPException(status_code=500, detail="ReactiveOrderWatcher not initialized")
+        
+        # Получаем конфигурацию для проверки минимальной ликвидности
+        config_manager = src.main.config_manager
+        if config_manager is None:
+            raise HTTPException(status_code=500, detail="ConfigManager not initialized")
+        
+        config = config_manager.get_config()
+        
+        # Находим конфигурацию символа
+        symbol_config = None
+        for symbol in config.symbols_config:
+            if symbol.symbol == request.ticker:
+                symbol_config = symbol
+                break
+        
+        if symbol_config is None:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Symbol {request.ticker} not found in configuration"
+            )
+        
+        # Проверяем минимальную ликвидность
+        min_liquidity = symbol_config.min_liquidity
+        if min_liquidity <= 0:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid min_liquidity for symbol {request.ticker}: {min_liquidity}"
+            )
+        
+        # Добавляем запрос на поиск (ордера автоматически отправятся в WebSocket)
+        await reactive_watcher.add_search_request(
+            ticker=request.ticker,
+            side=request.side,
+            price=request.price,
+            timestamp=request.timestamp,
+            tolerance=request.tolerance
+        )
+        
+        return {
+            "success": True,
+            "message": f"Search initiated for {request.ticker} {request.side} @ {request.price}",
+            "min_liquidity": min_liquidity,
+            "tolerance": request.tolerance,
+            "timestamp": request.timestamp,
+            "note": "Search is being processed. Found orders will be sent via WebSocket orderUpdate channel"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+@router.post("/reactive-orders/track")
+async def track_order_reactive(request: OrderTrackRequest) -> Dict[str, Any]:
+    """Начать отслеживание ордера по ID.
+    
+    Args:
+        request: Параметры отслеживания ордера
+        
+    Returns:
+        Статус отслеживания
+    """
+    try:
+        # Import here to avoid circular imports
+        import src.main
+        
+        reactive_watcher = src.main.reactive_order_watcher
+        if reactive_watcher is None:
+            raise HTTPException(status_code=500, detail="ReactiveOrderWatcher not initialized")
+        
+        await reactive_watcher.start_tracking_order(request.order_id)
+        
+        return {
+            "success": True,
+            "message": f"Started tracking order {request.order_id}",
+            "order_id": request.order_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start tracking: {str(e)}")
+
+@router.delete("/reactive-orders/untrack")
+async def untrack_order_reactive(request: OrderTrackRequest) -> Dict[str, Any]:
+    """Остановить отслеживание ордера по ID.
+    
+    Args:
+        request: Параметры остановки отслеживания ордера
+        
+    Returns:
+        Статус остановки отслеживания
+    """
+    try:
+        # Import here to avoid circular imports
+        import src.main
+        
+        reactive_watcher = src.main.reactive_order_watcher
+        if reactive_watcher is None:
+            raise HTTPException(status_code=500, detail="ReactiveOrderWatcher not initialized")
+        
+        await reactive_watcher.stop_tracking_order(request.order_id)
+        
+        return {
+            "success": True,
+            "message": f"Stopped tracking order {request.order_id}",
+            "order_id": request.order_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop tracking: {str(e)}")
+
+@router.get("/reactive-orders/status", response_model=ReactiveWatcherStatus)
+async def get_reactive_watcher_status() -> ReactiveWatcherStatus:
+    """Получить статус ReactiveOrderWatcher.
+    
+    Returns:
+        Статус ReactiveOrderWatcher
+    """
+    try:
+        # Import here to avoid circular imports
+        import src.main
+        
+        reactive_watcher = src.main.reactive_order_watcher
+        if reactive_watcher is None:
+            raise HTTPException(status_code=500, detail="ReactiveOrderWatcher not initialized")
+        
+        return ReactiveWatcherStatus(
+            is_initialized=reactive_watcher.current_file_path is not None,
+            current_file=str(reactive_watcher.current_file_path) if reactive_watcher.current_file_path else None,
+            tracked_orders_count=len(reactive_watcher.tracked_orders),
+            cached_orders_count=sum(len(orders) for orders in reactive_watcher.cached_orders.values()),
+            monitoring_active=reactive_watcher.monitoring_task is not None and not reactive_watcher.monitoring_task.done(),
+            cache_duration_seconds=reactive_watcher.cache_duration_seconds,
+            monitoring_interval_ms=reactive_watcher.monitoring_interval_ms
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")

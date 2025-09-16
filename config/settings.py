@@ -31,10 +31,10 @@ class Settings(BaseSettings):
     PERIODIC_SCAN_INTERVAL_SEC: int = 1  # Scan interval for real-time data (1 second)
     
     # Single file tail watcher settings - optimized for HyperLiquid node coexistence
-    SINGLE_FILE_TAIL_ENABLED: bool = True  # Enable single file tail approach
+    SINGLE_FILE_TAIL_ENABLED: bool = False  # Enable single file tail approach
     FALLBACK_SCAN_INTERVAL_SEC: int = 300  # Fallback scan interval (5 minutes) - reduced
-    TAIL_READLINE_INTERVAL_MS: float = 100.0  # Conservative polling (100ms) - increased
-    TAIL_BATCH_SIZE: int = 5  # Very small batches to reduce CPU spikes
+    TAIL_READLINE_INTERVAL_MS: float = 1000.0  # Conservative polling (1 second) - increased to reduce CPU
+    TAIL_BATCH_SIZE: int = 50  # Larger batches to reduce processing frequency
     TAIL_BUFFER_SIZE: int = 8192  # Smaller buffer (8KB) to reduce memory usage
     TAIL_AGGRESSIVE_POLLING: bool = False  # Disable aggressive polling for stability
     
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     TAIL_LOCK_FREE: bool = False  # Disable lock-free processing for stability
     
     # Streaming processing - conservative settings
-    TAIL_STREAMING: bool = False  # Disable streaming to reduce complexity
+    TAIL_STREAMING: bool = False
     TAIL_STREAM_BUFFER_SIZE: int = 32 * 1024  # 32KB stream buffer if enabled
     TAIL_STREAM_CHUNK_SIZE: int = 8 * 1024  # 8KB chunks if enabled
     TAIL_STREAM_PROCESSING_DELAY_MS: float = 10.0  # 10ms delay between chunks
