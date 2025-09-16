@@ -501,6 +501,7 @@ class ReactiveOrderWatcher:
     
     async def _monitor_tracked_orders(self) -> None:
         """Мониторинг изменений статуса отслеживаемых ордеров."""
+        print("DEBUG: _monitor_tracked_orders() started")  # Принудительный вывод
         logger.info("Started monitoring tracked orders")
         
         try:
@@ -628,6 +629,7 @@ class ReactiveOrderWatcher:
 
     async def _process_active_requests(self) -> None:
         """Обработка активных запросов на поиск ордеров."""
+        print("DEBUG: _process_active_requests() started")  # Принудительный вывод
         logger.info("Started processing active requests")
         
         try:
