@@ -159,10 +159,13 @@ async def startup_event():
         
         # Start reactive order watcher monitoring
         try:
+            logger.info("🔄 Calling reactive_order_watcher.start_monitoring()...")
             await reactive_order_watcher.start_monitoring()
             logger.info("✅ Reactive order watcher monitoring started successfully")
         except Exception as e:
             logger.error(f"❌ Failed to start reactive order watcher monitoring: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
             raise
         
         # Start directory cleaner
