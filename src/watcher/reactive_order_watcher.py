@@ -11,8 +11,9 @@ from watchdog.observers import Observer
 
 from src.models.tracked_order import TrackedOrder, OrderSearchCriteria
 from src.parser.log_parser import LogParser
+from src.utils.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 if TYPE_CHECKING:
     from src.storage.order_manager import OrderManager

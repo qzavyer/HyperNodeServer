@@ -13,6 +13,7 @@ from typing import List, Tuple
 import logging
 
 from config.settings import settings
+from src.utils.logger import setup_logger
 
 
 class DirectoryCleaner:
@@ -26,7 +27,7 @@ class DirectoryCleaner:
             single_file_watcher: Ссылка на SingleFileTailWatcher для защиты текущего файла
         """
         self.base_dir = Path(base_dir).expanduser().resolve()
-        self.logger = logging.getLogger(__name__)
+        self.logger = setup_logger(__name__)
         self.single_file_watcher = single_file_watcher
         
         # Регулярка для поиска папок с форматом даты yyyyMMdd
