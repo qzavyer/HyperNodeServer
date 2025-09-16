@@ -882,10 +882,12 @@ class ReactiveOrderWatcher:
 
     async def start_monitoring(self) -> None:
         """Запускает мониторинг отслеживаемых ордеров."""
+        print("DEBUG: start_monitoring() called")  # Принудительный вывод
         logger.info("Starting ReactiveOrderWatcher monitoring...")
         
         # Устанавливаем флаг запуска
         self.is_running = True
+        print(f"DEBUG: is_running set to {self.is_running}")  # Принудительный вывод
         
         if not self.monitoring_task or self.monitoring_task.done():
             logger.info("Creating monitoring task...")
