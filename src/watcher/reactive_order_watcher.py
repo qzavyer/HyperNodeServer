@@ -659,6 +659,8 @@ class ReactiveOrderWatcher:
         Args:
             target_time: Время до которого читать файл
         """
+        logger.info(f"Processing file until time: {target_time}")
+        
         if not self.current_file_handle:
             logger.warning("No file handle available for processing")
             return
@@ -666,7 +668,9 @@ class ReactiveOrderWatcher:
         try:
             # Читаем последние строки (можно оптимизировать)
             lines = await self._read_last_lines(10000)
+            logger.info(f"Read {len(lines)} lines from file")
             
+            processed_orders = 0
             for line in lines:
                 try:
                     # Парсим строку
@@ -676,7 +680,10 @@ class ReactiveOrderWatcher:
                     
                     # Проверяем время ордера
                     if order.timestamp >= target_time:
+                        logger.info(f"Reached target time: {order.timestamp} >= {target_time}")
                         break  # Дошли до целевого времени
+                    
+                    processed_orders += 1
                     
                     # Проверяем конфигурацию
                     if not await self._check_order_configuration(order):
@@ -696,6 +703,8 @@ class ReactiveOrderWatcher:
                     
         except Exception as e:
             logger.error(f"Error processing file until time {target_time}: {e}")
+        finally:
+            logger.info(f"Processed {processed_orders} orders from file")
 
     async def _check_order_configuration(self, order: 'Order') -> bool:
         """Проверить соответствие ордера конфигурации.
