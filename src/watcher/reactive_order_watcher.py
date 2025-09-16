@@ -889,19 +889,37 @@ class ReactiveOrderWatcher:
         self.is_running = True
         print(f"DEBUG: is_running set to {self.is_running}")  # Принудительный вывод
         
+        print("DEBUG: About to create monitoring task")  # Принудительный вывод
         if not self.monitoring_task or self.monitoring_task.done():
+            print("DEBUG: Creating monitoring task...")  # Принудительный вывод
             logger.info("Creating monitoring task...")
-            self.monitoring_task = asyncio.create_task(self._monitor_tracked_orders())
-            logger.info("✅ Reactive order watcher monitoring started")
+            try:
+                self.monitoring_task = asyncio.create_task(self._monitor_tracked_orders())
+                print("DEBUG: Monitoring task created successfully")  # Принудительный вывод
+                logger.info("✅ Reactive order watcher monitoring started")
+            except Exception as e:
+                print(f"DEBUG: Error creating monitoring task: {e}")  # Принудительный вывод
+                logger.error(f"Error creating monitoring task: {e}")
+                raise
         else:
+            print("DEBUG: Monitoring task already running")  # Принудительный вывод
             logger.info("Monitoring task already running")
         
         # Также запускаем обработку активных запросов
+        print("DEBUG: About to create processing task")  # Принудительный вывод
         if not self.processing_task or self.processing_task.done():
+            print("DEBUG: Creating processing task...")  # Принудительный вывод
             logger.info("Creating processing task...")
-            self.processing_task = asyncio.create_task(self._process_active_requests())
-            logger.info("✅ Reactive order watcher processing started")
+            try:
+                self.processing_task = asyncio.create_task(self._process_active_requests())
+                print("DEBUG: Processing task created successfully")  # Принудительный вывод
+                logger.info("✅ Reactive order watcher processing started")
+            except Exception as e:
+                print(f"DEBUG: Error creating processing task: {e}")  # Принудительный вывод
+                logger.error(f"Error creating processing task: {e}")
+                raise
         else:
+            print("DEBUG: Processing task already running")  # Принудительный вывод
             logger.info("Processing task already running")
         
         logger.info("ReactiveOrderWatcher startup completed")
