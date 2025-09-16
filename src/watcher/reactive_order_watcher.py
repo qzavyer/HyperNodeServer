@@ -688,7 +688,7 @@ class ReactiveOrderWatcher:
                     # Проверяем время ордера
                     if order.timestamp >= target_time:
                         logger.info(f"Reached target time: {order.timestamp} >= {target_time}")
-                        break  # Дошли до целевого времени
+                        # break  # Дошли до целевого времени
                     
                     processed_orders += 1
                     
