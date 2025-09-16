@@ -158,8 +158,12 @@ async def startup_event():
         logger.info("✅ Reactive order watcher initialized successfully")
         
         # Start reactive order watcher monitoring
-        await reactive_order_watcher.start_monitoring()
-        logger.info("✅ Reactive order watcher monitoring started successfully")
+        try:
+            await reactive_order_watcher.start_monitoring()
+            logger.info("✅ Reactive order watcher monitoring started successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to start reactive order watcher monitoring: {e}")
+            raise
         
         # Start directory cleaner
         asyncio.create_task(directory_cleaner.start_periodic_cleanup_async())
