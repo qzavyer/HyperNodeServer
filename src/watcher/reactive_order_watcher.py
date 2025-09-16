@@ -633,8 +633,11 @@ class ReactiveOrderWatcher:
         logger.info("Started processing active requests")
         
         try:
+            print(f"DEBUG: Starting processing loop, is_running={self.is_running}")  # Принудительный вывод
             while self.is_running:  # Работаем пока сервис запущен
+                print(f"DEBUG: Processing loop iteration, active_requests={len(self.active_requests)}")  # Принудительный вывод
                 if self.active_requests:
+                    print("DEBUG: Processing active requests")  # Принудительный вывод
                     # Находим максимальное время среди активных запросов
                     max_time = max(req['timestamp'] for req in self.active_requests)
                     
@@ -643,6 +646,8 @@ class ReactiveOrderWatcher:
                     
                     # Обрабатываем все активные запросы
                     await self._process_requests_batch()
+                else:
+                    print("DEBUG: No active requests, waiting...")  # Принудительный вывод
                 
                 # Ждем интервал мониторинга
                 await asyncio.sleep(self.monitoring_interval_ms / 1000.0)
