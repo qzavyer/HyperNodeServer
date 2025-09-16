@@ -157,6 +157,10 @@ async def startup_event():
         await reactive_order_watcher.initialize()
         logger.info("✅ Reactive order watcher initialized successfully")
         
+        # Start reactive order watcher monitoring
+        await reactive_order_watcher.start_monitoring()
+        logger.info("✅ Reactive order watcher monitoring started successfully")
+        
         # Start directory cleaner
         asyncio.create_task(directory_cleaner.start_periodic_cleanup_async())
         logger.info("✅ Directory cleaner started successfully")
