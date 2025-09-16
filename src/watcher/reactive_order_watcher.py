@@ -874,12 +874,22 @@ class ReactiveOrderWatcher:
 
     async def start_monitoring(self) -> None:
         """Запускает мониторинг отслеживаемых ордеров."""
+        logger.info("Starting ReactiveOrderWatcher monitoring...")
+        
         if not self.monitoring_task or self.monitoring_task.done():
+            logger.info("Creating monitoring task...")
             self.monitoring_task = asyncio.create_task(self._monitor_tracked_orders())
-            logger.info("Reactive order watcher monitoring started")
+            logger.info("✅ Reactive order watcher monitoring started")
+        else:
+            logger.info("Monitoring task already running")
         
         # Также запускаем обработку активных запросов
         if not self.processing_task or self.processing_task.done():
+            logger.info("Creating processing task...")
             self.processing_task = asyncio.create_task(self._process_active_requests())
-            logger.info("Reactive order watcher processing started")
+            logger.info("✅ Reactive order watcher processing started")
+        else:
+            logger.info("Processing task already running")
+        
+        logger.info("ReactiveOrderWatcher startup completed")
 
