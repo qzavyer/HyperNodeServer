@@ -676,6 +676,8 @@ class ReactiveOrderWatcher:
             
             processed_orders = 0
             parsed_orders = 0
+            first_order_time = None
+            last_order_time = None
             for line in lines:
                 try:
                     # Парсим строку
@@ -685,24 +687,32 @@ class ReactiveOrderWatcher:
                     
                     parsed_orders += 1
                     
+                    # Запоминаем время первого и последнего ордера
+                    if first_order_time is None:
+                        first_order_time = order.timestamp
+                    last_order_time = order.timestamp
+                    
                     # Проверяем время ордера
                     if order.timestamp >= target_time:
                         logger.info(f"Reached target time: {order.timestamp} >= {target_time}")
-                        # break  # Дошли до целевого времени
+                        break  # Дошли до целевого времени
                     
                     processed_orders += 1
                     
                     # Проверяем конфигурацию
                     if not await self._check_order_configuration(order):
+                        logger.debug(f"Order {order.id} filtered by configuration")
                         continue
                     
                     # Проверяем соответствие активным запросам
                     matching_requests = await self._find_matching_requests(order)
                     if not matching_requests:
+                        logger.debug(f"Order {order.id} filtered by request matching")
                         continue
                     
                     # Добавляем в кэш
                     await self._add_order_to_cache(order)
+                    logger.debug(f"Order {order.id} added to cache for {order.symbol}")
                     
                 except Exception as e:
                     logger.debug(f"Error processing line: {e}")
@@ -711,7 +721,11 @@ class ReactiveOrderWatcher:
         except Exception as e:
             logger.error(f"Error processing file until time {target_time}: {e}")
         finally:
-            logger.info(f"Parsed {parsed_orders} orders, processed {processed_orders} orders from file")
+            if first_order_time and last_order_time:
+                logger.info(f"Parsed {parsed_orders} orders, processed {processed_orders} orders from file")
+                logger.info(f"Order time range: {first_order_time} to {last_order_time}, target: {target_time}")
+            else:
+                logger.info(f"Parsed {parsed_orders} orders, processed {processed_orders} orders from file")
 
     async def _check_order_configuration(self, order: 'Order') -> bool:
         """Проверить соответствие ордера конфигурации.
