@@ -803,25 +803,27 @@ class ReactiveOrderWatcher:
             ticker = request['ticker']
             
             # Получаем ордера для тикера из кэша
-            if ticker not in self.orders_cache:
-                continue
-            
-            orders = self.orders_cache[ticker]
-            
-            # Выбираем лучший ордер
-            best_order = await self._select_best_order(orders, request)
-            
-            if best_order:
-                # Отправляем в WebSocket
-                await self._send_order_to_websocket(best_order)
+            if ticker in self.orders_cache:
+                orders = self.orders_cache[ticker]
                 
-                # Начинаем отслеживание если ордер в статусе open
-                if best_order.status == 'open':
-                    await self._start_tracking_order(best_order)
+                # Выбираем лучший ордер
+                best_order = await self._select_best_order(orders, request)
                 
-                logger.info(f"Processed request for {ticker}: found order {best_order.id}")
+                if best_order:
+                    # Отправляем в WebSocket
+                    await self._send_order_to_websocket(best_order)
+                    
+                    # Начинаем отслеживание если ордер в статусе open
+                    if best_order.status == 'open':
+                        await self._start_tracking_order(best_order)
+                    
+                    logger.info(f"Processed request for {ticker}: found order {best_order.id}")
+                else:
+                    logger.info(f"Processed request for {ticker}: no matching orders found")
+            else:
+                logger.info(f"Processed request for {ticker}: no orders in cache")
             
-            # Помечаем запрос как обработанный
+            # Помечаем запрос как обработанный (всегда)
             processed_requests.append(request)
         
         # Удаляем обработанные запросы
