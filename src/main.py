@@ -182,8 +182,7 @@ async def shutdown_event():
             await single_file_tail_watcher.stop_async()
         
         # Stop reactive order watcher monitoring
-        if reactive_order_watcher.monitoring_task and not reactive_order_watcher.monitoring_task.done():
-            reactive_order_watcher.monitoring_task.cancel()
+        await reactive_order_watcher.stop_monitoring()
         
         # Stop WebSocket manager
         await websocket_manager.stop()

@@ -48,6 +48,9 @@ class ReactiveOrderWatcher:
         self.current_file_handle: Optional[object] = None
         self.file_position: int = 0
         
+        # Флаг для управления жизненным циклом
+        self.is_running: bool = False
+        
         # Отслеживаемые ордера
         self.tracked_orders: Dict[str, TrackedOrder] = {}  # order_id -> TrackedOrder
         self.is_active: bool = False  # Активен ли мониторинг
@@ -339,7 +342,12 @@ class ReactiveOrderWatcher:
         self.active_requests.append(request)
         logger.info(f"Added search request: {ticker} {side} @ {price} at {timestamp}")
         
-        # Обработка уже запущена в start_monitoring()
+        # Запускаем обработку если еще не запущена
+        if not self.processing_task or self.processing_task.done():
+            logger.info(f"Creating processing task for {len(self.active_requests)} active requests")
+            self.processing_task = asyncio.create_task(self._process_active_requests())
+            logger.info("Processing task created successfully")
+        
         logger.info(f"Added search request to queue: {len(self.active_requests)} total requests")
     
     async def find_order(self, ticker: str, side: str, price: float, tolerance: float = 0.000001) -> List['Order']:
@@ -496,10 +504,10 @@ class ReactiveOrderWatcher:
         logger.info("Started monitoring tracked orders")
         
         try:
-            while self.tracked_orders:
+            while self.is_running:  # Работаем пока сервис запущен
                 try:
-                    # Читаем новые строки из файла
-                    if self.current_file_handle:
+                    # Читаем новые строки из файла только если есть отслеживаемые ордера
+                    if self.tracked_orders and self.current_file_handle:
                         lines = await self._read_last_lines(100)  # Читаем последние 100 строк
                         
                         # Проверяем изменения статуса отслеживаемых ордеров
@@ -623,7 +631,7 @@ class ReactiveOrderWatcher:
         logger.info("Started processing active requests")
         
         try:
-            while True:  # Работаем постоянно
+            while self.is_running:  # Работаем пока сервис запущен
                 if self.active_requests:
                     # Находим максимальное время среди активных запросов
                     max_time = max(req['timestamp'] for req in self.active_requests)
@@ -876,6 +884,9 @@ class ReactiveOrderWatcher:
         """Запускает мониторинг отслеживаемых ордеров."""
         logger.info("Starting ReactiveOrderWatcher monitoring...")
         
+        # Устанавливаем флаг запуска
+        self.is_running = True
+        
         if not self.monitoring_task or self.monitoring_task.done():
             logger.info("Creating monitoring task...")
             self.monitoring_task = asyncio.create_task(self._monitor_tracked_orders())
@@ -892,4 +903,28 @@ class ReactiveOrderWatcher:
             logger.info("Processing task already running")
         
         logger.info("ReactiveOrderWatcher startup completed")
+
+    async def stop_monitoring(self) -> None:
+        """Останавливает мониторинг отслеживаемых ордеров."""
+        logger.info("Stopping ReactiveOrderWatcher monitoring...")
+        
+        # Устанавливаем флаг остановки
+        self.is_running = False
+        
+        # Отменяем задачи
+        if self.monitoring_task and not self.monitoring_task.done():
+            self.monitoring_task.cancel()
+            try:
+                await self.monitoring_task
+            except asyncio.CancelledError:
+                pass
+        
+        if self.processing_task and not self.processing_task.done():
+            self.processing_task.cancel()
+            try:
+                await self.processing_task
+            except asyncio.CancelledError:
+                pass
+        
+        logger.info("✅ ReactiveOrderWatcher monitoring stopped")
 
