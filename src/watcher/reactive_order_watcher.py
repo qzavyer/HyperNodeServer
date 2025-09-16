@@ -319,15 +319,12 @@ class ReactiveOrderWatcher:
             timestamp: Время сигнала в UTC (ISO format)
             tolerance: Допустимое отклонение цены (по умолчанию 0.000001)
         """
-        print(f"DEBUG: add_search_request() called: {ticker} {side} @ {price} at {timestamp}")  # Принудительный вывод
         from datetime import datetime
         
         # Парсим время сигнала
         try:
             signal_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            print(f"DEBUG: Parsed timestamp: {signal_time}")  # Принудительный вывод
         except ValueError:
-            print(f"DEBUG: Invalid timestamp format: {timestamp}")  # Принудительный вывод
             logger.error(f"Invalid timestamp format: {timestamp}")
             return
         
@@ -343,17 +340,14 @@ class ReactiveOrderWatcher:
         
         # Добавляем в активные запросы
         self.active_requests.append(request)
-        print(f"DEBUG: Added request to queue, total: {len(self.active_requests)}")  # Принудительный вывод
         logger.info(f"Added search request: {ticker} {side} @ {price} at {timestamp}")
         
         # Запускаем обработку если еще не запущена
         if not self.processing_task or self.processing_task.done():
-            print("DEBUG: Creating processing task")  # Принудительный вывод
             logger.info(f"Creating processing task for {len(self.active_requests)} active requests")
             self.processing_task = asyncio.create_task(self._process_active_requests())
             logger.info("Processing task created successfully")
         
-        print(f"DEBUG: Search request added successfully, queue size: {len(self.active_requests)}")  # Принудительный вывод
         logger.info(f"Added search request to queue: {len(self.active_requests)} total requests")
     
     async def find_order(self, ticker: str, side: str, price: float, tolerance: float = 0.000001) -> List['Order']:
@@ -507,7 +501,6 @@ class ReactiveOrderWatcher:
     
     async def _monitor_tracked_orders(self) -> None:
         """Мониторинг изменений статуса отслеживаемых ордеров."""
-        print("DEBUG: _monitor_tracked_orders() started")  # Принудительный вывод
         logger.info("Started monitoring tracked orders")
         
         try:
@@ -635,30 +628,19 @@ class ReactiveOrderWatcher:
 
     async def _process_active_requests(self) -> None:
         """Обработка активных запросов на поиск ордеров."""
-        print("DEBUG: _process_active_requests() started")  # Принудительный вывод
         logger.info("Started processing active requests")
         
         try:
-            print(f"DEBUG: Starting processing loop, is_running={self.is_running}")  # Принудительный вывод
             while self.is_running:  # Работаем пока сервис запущен
-                print(f"DEBUG: Processing loop iteration, active_requests={len(self.active_requests)}")  # Принудительный вывод
                 if self.active_requests:
-                    print("DEBUG: Processing active requests")  # Принудительный вывод
                     # Находим максимальное время среди активных запросов
                     max_time = max(req['timestamp'] for req in self.active_requests)
-                    print(f"DEBUG: Max time: {max_time}")  # Принудительный вывод
                     
                     # Читаем файл до максимального времени
-                    print("DEBUG: Calling _process_file_until_time")  # Принудительный вывод
                     await self._process_file_until_time(max_time)
-                    print("DEBUG: _process_file_until_time completed")  # Принудительный вывод
                     
                     # Обрабатываем все активные запросы
-                    print("DEBUG: Calling _process_requests_batch")  # Принудительный вывод
                     await self._process_requests_batch()
-                    print("DEBUG: _process_requests_batch completed")  # Принудительный вывод
-                else:
-                    print("DEBUG: No active requests, waiting...")  # Принудительный вывод
                 
                 # Ждем интервал мониторинга
                 await asyncio.sleep(self.monitoring_interval_ms / 1000.0)
@@ -902,44 +884,32 @@ class ReactiveOrderWatcher:
 
     async def start_monitoring(self) -> None:
         """Запускает мониторинг отслеживаемых ордеров."""
-        print("DEBUG: start_monitoring() called")  # Принудительный вывод
         logger.info("Starting ReactiveOrderWatcher monitoring...")
         
         # Устанавливаем флаг запуска
         self.is_running = True
-        print(f"DEBUG: is_running set to {self.is_running}")  # Принудительный вывод
         
-        print("DEBUG: About to create monitoring task")  # Принудительный вывод
         if not self.monitoring_task or self.monitoring_task.done():
-            print("DEBUG: Creating monitoring task...")  # Принудительный вывод
             logger.info("Creating monitoring task...")
             try:
                 self.monitoring_task = asyncio.create_task(self._monitor_tracked_orders())
-                print("DEBUG: Monitoring task created successfully")  # Принудительный вывод
                 logger.info("✅ Reactive order watcher monitoring started")
             except Exception as e:
-                print(f"DEBUG: Error creating monitoring task: {e}")  # Принудительный вывод
                 logger.error(f"Error creating monitoring task: {e}")
                 raise
         else:
-            print("DEBUG: Monitoring task already running")  # Принудительный вывод
             logger.info("Monitoring task already running")
         
         # Также запускаем обработку активных запросов
-        print("DEBUG: About to create processing task")  # Принудительный вывод
         if not self.processing_task or self.processing_task.done():
-            print("DEBUG: Creating processing task...")  # Принудительный вывод
             logger.info("Creating processing task...")
             try:
                 self.processing_task = asyncio.create_task(self._process_active_requests())
-                print("DEBUG: Processing task created successfully")  # Принудительный вывод
                 logger.info("✅ Reactive order watcher processing started")
             except Exception as e:
-                print(f"DEBUG: Error creating processing task: {e}")  # Принудительный вывод
                 logger.error(f"Error creating processing task: {e}")
                 raise
         else:
-            print("DEBUG: Processing task already running")  # Принудительный вывод
             logger.info("Processing task already running")
         
         logger.info("ReactiveOrderWatcher startup completed")
