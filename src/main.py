@@ -146,22 +146,20 @@ async def startup_event():
         logger.info("✅ Application started successfully")
         logger.info(f"📊 Loaded {order_manager.get_order_count()} orders")
         
-        # Start single file tail watcher for real-time processing
-        if settings.SINGLE_FILE_TAIL_ENABLED:
-            await single_file_tail_watcher.start_async()
-            logger.info("✅ Single file tail watcher started successfully")
-        else:
-            logger.info("Single file tail watcher disabled in settings")
-        
-        # Initialize reactive order watcher
-        await reactive_order_watcher.initialize()
-        logger.info("✅ Reactive order watcher initialized successfully")
-        
         # Start reactive order watcher monitoring
         try:
-            logger.info("🔄 Calling reactive_order_watcher.start_monitoring()...")
-            await reactive_order_watcher.start_monitoring()
-            logger.info("✅ Reactive order watcher monitoring started successfully")
+            # Start single file tail watcher for real-time processing
+            if settings.SINGLE_FILE_TAIL_ENABLED:
+                await single_file_tail_watcher.start_async()
+                logger.info("✅ Single file tail watcher started successfully")
+            else:
+                logger.info("Single file tail watcher disabled in settings")
+                # Initialize reactive order watcher
+                await reactive_order_watcher.initialize()
+                logger.info("✅ Reactive order watcher initialized successfully")
+                logger.info("🔄 Calling reactive_order_watcher.start_monitoring()...")
+                await reactive_order_watcher.start_monitoring()
+                logger.info("✅ Reactive order watcher monitoring started successfully")
         except Exception as e:
             logger.error(f"❌ Failed to start reactive order watcher monitoring: {e}")
             import traceback

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     PERIODIC_SCAN_INTERVAL_SEC: int = 1  # Scan interval for real-time data (1 second)
     
     # Single file tail watcher settings - optimized for HyperLiquid node coexistence
-    SINGLE_FILE_TAIL_ENABLED: bool = False  # Enable single file tail approach
+    SINGLE_FILE_TAIL_ENABLED: bool = True  # Enable single file tail approach
     FALLBACK_SCAN_INTERVAL_SEC: int = 300  # Fallback scan interval (5 minutes) - reduced
     TAIL_READLINE_INTERVAL_MS: float = 1000.0  # Conservative polling (1 second) - increased to reduce CPU
     TAIL_BATCH_SIZE: int = 50  # Larger batches to reduce processing frequency
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     TAIL_AGGRESSIVE_POLLING: bool = False  # Disable aggressive polling for stability
     
     # Parallel processing settings - conservative for HyperLiquid node coexistence
-    TAIL_PARALLEL_WORKERS: int = 1  # Single worker to reduce CPU contention
+    TAIL_PARALLEL_WORKERS: int = 4  # Single worker to reduce CPU contention
     TAIL_PARALLEL_BATCH_SIZE: int = 50  # Smaller batches to reduce memory spikes
     TAIL_JSON_OPTIMIZATION: bool = True  # Enable JSON parsing optimization
     TAIL_PRE_FILTER: bool = True  # Enable pre-filtering of lines before parsing
