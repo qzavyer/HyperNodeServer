@@ -762,8 +762,10 @@ class SingleFileTailWatcher:
                         oldest_keys = list(self.json_cache.keys())[:1000]
                         for key in oldest_keys:
                             del self.json_cache[key]
-                except:
-                    pass  # If JSON parsing fails, don't cache
+                except (json.JSONDecodeError, KeyError, TypeError) as e:
+                    # If JSON parsing fails, don't cache - this is expected for malformed data
+                    logger.debug(f"JSON parsing failed for caching: {e}")
+                    pass
             
             return order
             

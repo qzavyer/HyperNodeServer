@@ -100,8 +100,8 @@ jobs:
     - name: Run bandit security linter
       run: |
         echo "Running bandit security linter..."
-        bandit -r src/ -f json -o bandit-results.json || true
-        bandit -r src/ -f txt
+        bandit -r src/ -f json -o bandit-results.json -ll || true
+        bandit -r src/ -f txt -ll
         
     - name: Upload audit results
       uses: actions/upload-artifact@v4
