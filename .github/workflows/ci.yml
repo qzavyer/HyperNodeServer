@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -85,7 +89,7 @@ jobs:
       run: |
         echo "Running pip-audit for known vulnerabilities..."
         pip-audit --desc --format=json --output=audit-results.json || true
-        pip-audit --desc --format=table
+        pip-audit --desc
         
     - name: Run safety check
       run: |
