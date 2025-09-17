@@ -1,18 +1,62 @@
-name: CD - Deploy
+name: CD - Continuous Deployment
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main, master ]
+  pull_request:
+    types: [closed]
+    branches: [ main, master ]
   workflow_run:
-    workflows: ["CI - Tests"]
+    workflows: ["CI - Continuous Integration"]
     types:
       - completed
-    branches: [ main, master, develop ]
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    if: |
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 
+      (github.event.workflow_run.conclusion == 'success' || 
+       (github.event_name == 'pull_request' && github.event.pull_request.merged == true))
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Install semantic-release
+      run: npm install -g semantic-release @semantic-release/git @semantic-release/changelog @semantic-release/github
+      
+    - name: Configure Git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        
+    - name: Run semantic-release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: npx semantic-release
+
   deploy:
     runs-on: ubuntu-latest
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.event.workflow_run.conclusion == 'success'
+    needs: version
+    if: |
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 
+      (github.event.workflow_run.conclusion == 'success' || 
+       (github.event_name == 'pull_request' && github.event.pull_request.merged == true))
     
     steps:
     - name: Checkout code
@@ -38,33 +82,21 @@ jobs:
         cp docker-compose.yml deployment/
         cp Dockerfile deployment/
         
-    - name: Deploy to staging (if configured)
+    - name: Deploy to staging
       if: vars.STAGING_HOST != ''
       run: |
         echo "Deploying to staging server..."
         # Add your staging deployment logic here
-        # Example: rsync, scp, or SSH commands
         
-    - name: Deploy to production (if configured)
+    - name: Deploy to production
       if: vars.PRODUCTION_HOST != ''
       run: |
         echo "Deploying to production server..."
         # Add your production deployment logic here
-        # Example: rsync, scp, or SSH commands
         
     - name: Notify deployment
       run: |
-        echo "Deployment completed successfully!"
-        # Add notification logic (Slack, Discord, etc.)
-        
-  notify:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
-    
-    steps:
-    - name: Notify deployment ready
-      run: |
-        echo "✅ New version ready for deployment!"
+        echo "✅ Deployment completed successfully!"
         echo "📦 Pull latest changes: git pull origin main"
         echo "🐳 Start application: docker compose up -d"
         echo "🔗 Application will be available at: http://localhost:8000"
