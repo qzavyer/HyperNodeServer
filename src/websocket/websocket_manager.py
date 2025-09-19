@@ -74,6 +74,12 @@ class WebSocketManager:
             if websocket in channel:
                 channel.remove(websocket)
                 logger.info(f"WebSocket disconnected from channel: {channel_name}")
+                # Пытаемся корректно закрыть соединение
+                try:
+                    if websocket.client_state.name == "CONNECTED":
+                        await websocket.close(code=1000, reason="Normal closure")
+                except Exception as e:
+                    logger.debug(f"Could not close websocket during disconnect: {e}")
                 break
 
     async def broadcast_order_update(self, order: Order):
@@ -106,9 +112,10 @@ class WebSocketManager:
                 logger.warning(f"WebSocket send timeout during order update")
                 disconnected.add(connection)
             except Exception as e:
-                # Специальная обработка для keepalive ping timeout
-                if "keepalive ping timeout" in str(e) or "1011" in str(e):
-                    logger.warning(f"WebSocket keepalive timeout, removing connection: {e}")
+                # Специальная обработка для различных типов ошибок
+                error_str = str(e).lower()
+                if any(keyword in error_str for keyword in ["keepalive ping timeout", "1011", "no close frame", "connection closed"]):
+                    logger.warning(f"WebSocket connection issue, removing connection: {e}")
                 else:
                     logger.error(f"Error sending order update: {e}")
                 disconnected.add(connection)
@@ -178,9 +185,10 @@ class WebSocketManager:
                 logger.warning(f"WebSocket send timeout during batch update")
                 disconnected.add(connection)
             except Exception as e:
-                # Специальная обработка для keepalive ping timeout
-                if "keepalive ping timeout" in str(e) or "1011" in str(e):
-                    logger.warning(f"WebSocket keepalive timeout, removing connection: {e}")
+                # Специальная обработка для различных типов ошибок
+                error_str = str(e).lower()
+                if any(keyword in error_str for keyword in ["keepalive ping timeout", "1011", "no close frame", "connection closed"]):
+                    logger.warning(f"WebSocket connection issue, removing connection: {e}")
                 else:
                     logger.error(f"Error sending batch update: {e}")
                 disconnected.add(connection)

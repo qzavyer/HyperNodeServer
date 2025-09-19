@@ -55,18 +55,26 @@ async def websocket_order_update(websocket: WebSocket):
                 if data == "ping":
                     await websocket.send_text("pong")
                     logger.debug("Sent pong to orderUpdate client")
+                elif data == "close":
+                    logger.info("Client requested close")
+                    await websocket.close(code=1000, reason="Client requested close")
+                    break
                 
             except WebSocketDisconnect:
                 logger.info("WebSocket orderUpdate client disconnected in loop")
+                break
+            except Exception as e:
+                logger.error(f"Error in orderUpdate message loop: {e}")
                 break
                 
     except WebSocketDisconnect:
         logger.info("WebSocket orderUpdate client disconnected during handshake")
     except Exception as e:
         logger.error(f"Error in orderUpdate WebSocket: {e}")
-        # Пытаемся закрыть соединение
+        # Пытаемся корректно закрыть соединение
         try:
-            await websocket.close(code=1011, reason=f"Internal error")
+            if websocket.client_state.name == "CONNECTED":
+                await websocket.close(code=1000, reason="Server error")
         except Exception as close_error:
             logger.debug(f"Could not close orderUpdate websocket: {close_error}")
     finally:
@@ -109,18 +117,26 @@ async def websocket_order_batch(websocket: WebSocket):
                 if data == "ping":
                     await websocket.send_text("pong")
                     logger.debug("Sent pong to orderBatch client")
+                elif data == "close":
+                    logger.info("Client requested close")
+                    await websocket.close(code=1000, reason="Client requested close")
+                    break
                     
             except WebSocketDisconnect:
                 logger.info("WebSocket orderBatch client disconnected in loop")
+                break
+            except Exception as e:
+                logger.error(f"Error in orderBatch message loop: {e}")
                 break
                 
     except WebSocketDisconnect:
         logger.info("WebSocket orderBatch client disconnected during handshake")
     except Exception as e:
         logger.error(f"Error in orderBatch WebSocket: {e}")
-        # Пытаемся закрыть соединение
+        # Пытаемся корректно закрыть соединение
         try:
-            await websocket.close(code=1011, reason=f"Internal error")
+            if websocket.client_state.name == "CONNECTED":
+                await websocket.close(code=1000, reason="Server error")
         except Exception as close_error:
             logger.debug(f"Could not close orderBatch websocket: {close_error}")
     finally:

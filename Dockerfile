@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY . .
 
 # Create hl user with fixed UID/GID for consistency with host
-RUN groupadd -g 1000 hl && useradd -u 1000 -g hl -m -d /home/hl hl
+RUN groupadd -g 1001 hl && useradd -u 1001 -g hl -m -d /home/hl hl
 
 # Create necessary directories with proper ownership
 RUN mkdir -p logs data config \
