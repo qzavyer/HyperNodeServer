@@ -508,11 +508,7 @@ class SingleFileTailWatcher:
                         # Log progress every 500k lines processed
                         if (line_idx + 1) % 500000 == 0:
                             logger.info(f"Line processing progress: {line_idx + 1}/{len(new_lines)} lines processed")
-                    
-                    # Update our position
-                    self.file_position = file_size
-                    logger.info(f"Updated file position to: {self.file_position}, processed {lines_read} lines total")
-                    
+
             except Exception as e:
                 logger.error(f"Error reading new data: {e}")
                 return
@@ -776,6 +772,7 @@ class SingleFileTailWatcher:
     
     def _parse_line_optimized(self, line: str) -> Optional:
         """Optimized line parsing with JSON caching and pre-filtering."""
+        print("_parse_line_optimized")
         if not line.strip():
             return None
         
