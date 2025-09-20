@@ -417,10 +417,13 @@ class SingleFileTailWatcher:
             
             # Use revolutionary approach based on settings
             if self.streaming:
+                logger.info("Reading lines using streaming approach")
                 await self._read_streaming_lines()
             elif self.memory_mapped and self.mmap_data:
+                logger.info("Reading lines using memory-mapped approach")
                 await self._read_memory_mapped_lines()
             else:
+                logger.info("Reading lines using traditional approach")
                 await self._read_traditional_lines()
                         
         except OSError as e:
