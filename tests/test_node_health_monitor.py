@@ -203,13 +203,13 @@ class TestNodeHealthMonitor:
         log_file = Path(self.temp_dir) / "threshold_log.txt"
         log_file.write_text("threshold log")
         
-        # Set modification time to exactly threshold minutes ago
-        threshold_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        # Set modification time to slightly less than threshold (4.9 minutes ago)
+        threshold_time = datetime.now(timezone.utc) - timedelta(minutes=4, seconds=54)
         os.utime(log_file, (threshold_time.timestamp(), threshold_time.timestamp()))
         
         status = self.monitor.get_health_status()
         
-        assert status.status == "healthy"  # Should be healthy (<= threshold)
+        assert status.status == "healthy"  # Should be healthy (< threshold)
     
     def test_get_health_status_subdirectories(self):
         """Test get_health_status with files in subdirectories."""

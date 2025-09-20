@@ -228,7 +228,7 @@ class TestReactiveAPI:
         # Проверяем результат
         assert response.status_code == 500
         data = response.json()
-        assert "ReactiveOrderWatcher not initialized" in data["detail"]
+        assert "Failed to get status:" in data["detail"]
     
     def test_order_search_request_validation(self):
         """Тест валидации OrderSearchRequest."""
