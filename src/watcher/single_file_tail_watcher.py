@@ -454,6 +454,7 @@ class SingleFileTailWatcher:
             import os
             file_stat = os.stat(self.current_file_path)
             file_size = file_stat.st_size
+            logger.info(f"File size check: {file_size} bytes")
             
             # Get current position from our internal tracking
             if not hasattr(self, 'file_position') or not hasattr(self, 'last_file_path') or self.last_file_path != self.current_file_path:
@@ -465,6 +466,7 @@ class SingleFileTailWatcher:
             
             current_pos = self.file_position
             new_data_bytes = file_size - current_pos
+            logger.info(f"Position check: current={current_pos}, file_size={file_size}, new_bytes={new_data_bytes}")
         except Exception as e:
             logger.error(f"Error checking file position: {e}")
             return
@@ -475,6 +477,7 @@ class SingleFileTailWatcher:
         
         # Read new data using regular file operations (non-blocking)
         if new_data_bytes > 0:
+            logger.info(f"About to read {new_data_bytes} bytes from file")
             try:
                 # Open file in binary mode for precise positioning
                 with open(self.current_file_path, 'rb') as f:
@@ -484,6 +487,7 @@ class SingleFileTailWatcher:
                     # Convert to text and split into lines
                     new_text = new_data.decode('utf-8', errors='ignore')
                     new_lines = new_text.split('\n')
+                    logger.info(f"Decoded {len(new_data)} bytes to {len(new_lines)} lines")
                     
                     # Process each line
                     for line in new_lines:
@@ -501,7 +505,7 @@ class SingleFileTailWatcher:
                     
                     # Update our position
                     self.file_position = file_size
-                    logger.info(f"Updated file position to: {self.file_position}")
+                    logger.info(f"Updated file position to: {self.file_position}, processed {lines_read} lines total")
                     
             except Exception as e:
                 logger.error(f"Error reading new data: {e}")
