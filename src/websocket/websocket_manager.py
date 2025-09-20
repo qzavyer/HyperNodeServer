@@ -39,6 +39,8 @@ class WebSocketManager:
                 await self.batch_timer
             except asyncio.CancelledError:
                 pass
+            finally:
+                self.batch_timer = None
 
         # Закрываем все соединения
         for channel in self.active_connections.values():

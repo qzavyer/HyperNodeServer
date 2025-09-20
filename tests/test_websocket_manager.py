@@ -86,7 +86,7 @@ class TestWebSocketManager:
         test_order = Order(
             id="test-123",
             symbol="BTC",
-            side="buy",
+            side="Bid",
             price=50000.0,
             size=1.0,
             owner="0x123",
@@ -120,7 +120,7 @@ class TestWebSocketManager:
         test_order = Order(
             id="test-123",
             symbol="BTC",
-            side="buy",
+            side="Bid",
             price=50000.0,
             size=1.0,
             owner="0x123",
@@ -147,7 +147,7 @@ class TestWebSocketManager:
         test_order = Order(
             id="test-123",
             symbol="BTC",
-            side="buy",
+            side="Bid",
             price=50000.0,
             size=1.0,
             owner="0x123",
@@ -174,7 +174,7 @@ class TestWebSocketManager:
         test_order = Order(
             id="test-123",
             symbol="BTC",
-            side="buy",
+            side="Bid",
             price=50000.0,
             size=1.0,
             owner="0x123",
@@ -194,7 +194,7 @@ class TestWebSocketManager:
         test_order = Order(
             id="test-123",
             symbol="BTC",
-            side="buy",
+            side="Bid",
             price=50000.0,
             size=1.0,
             owner="0x123",
@@ -216,9 +216,9 @@ class TestWebSocketManager:
         
         # Add orders to pending
         test_orders = [
-            Order(id="test-1", symbol="BTC", side="buy", price=50000.0, size=1.0, 
+            Order(id="test-1", symbol="BTC", side="Bid", price=50000.0, size=1.0, 
                   owner="0x123", timestamp=datetime.now(), status="open"),
-            Order(id="test-2", symbol="ETH", side="sell", price=3000.0, size=10.0,
+            Order(id="test-2", symbol="ETH", side="Ask", price=3000.0, size=10.0,
                   owner="0x456", timestamp=datetime.now(), status="open")
         ]
         self.manager.pending_orders.extend(test_orders)
@@ -248,7 +248,7 @@ class TestWebSocketManager:
         
         # Add some pending orders
         test_order = Order(
-            id="test-123", symbol="BTC", side="buy", price=50000.0, size=1.0,
+            id="test-123", symbol="BTC", side="Bid", price=50000.0, size=1.0,
             owner="0x123", timestamp=datetime.now(), status="open"
         )
         self.manager.pending_orders.append(test_order)
