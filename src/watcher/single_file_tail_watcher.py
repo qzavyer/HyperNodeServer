@@ -739,19 +739,25 @@ class SingleFileTailWatcher:
     
     async def _process_batch_parallel(self, lines: List[str]) -> List:
         """Process batch in parallel for large batches."""
+        logger.info(f"_process_batch_parallel: starting to process {len(lines)} lines")
+        
         # Split lines into chunks for parallel processing
         chunk_size = max(1, len(lines) // self.parallel_workers)
         chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
+        logger.info(f"_process_batch_parallel: split into {len(chunks)} chunks, chunk_size={chunk_size}")
         
         # Process chunks in parallel
         loop = asyncio.get_event_loop()
         tasks = []
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
+            logger.info(f"_process_batch_parallel: creating task {i+1}/{len(chunks)} for chunk of {len(chunk)} lines")
             task = loop.run_in_executor(self.executor, self._parse_chunk_sync, chunk)
             tasks.append(task)
         
+        logger.info(f"_process_batch_parallel: waiting for {len(tasks)} tasks to complete")
         # Wait for all chunks to complete
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info(f"_process_batch_parallel: all tasks completed, processing results")
         
         # Combine results
         orders = []
@@ -765,11 +771,15 @@ class SingleFileTailWatcher:
     
     def _parse_chunk_sync(self, lines: List[str]) -> List:
         """Synchronous parsing of a chunk of lines (for thread pool)."""
+        print(f"_parse_chunk_sync: starting to process {len(lines)} lines")
         orders = []
-        for line in lines:
+        for i, line in enumerate(lines):
+            if i % 1000 == 0:  # Log every 1000 lines
+                print(f"_parse_chunk_sync: processing line {i}/{len(lines)}")
             order = self._parse_line_optimized(line)
             if order:
                 orders.append(order)
+        print(f"_parse_chunk_sync: completed processing {len(lines)} lines, extracted {len(orders)} orders")
         return orders
     
     @lru_cache(maxsize=1000)
