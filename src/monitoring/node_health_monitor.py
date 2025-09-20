@@ -65,12 +65,17 @@ class NodeHealthMonitor:
             
             # Check all files in the directory and subdirectories
             for file_path in self.node_logs_path.rglob("*"):
-                if file_path.is_file():
-                    log_files_count += 1
-                    file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
-                    
-                    if latest_time is None or file_mtime > latest_time:
-                        latest_time = file_mtime
+                try:
+                    if file_path.is_file():
+                        log_files_count += 1
+                        file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+                        
+                        if latest_time is None or file_mtime > latest_time:
+                            latest_time = file_mtime
+                except (PermissionError, FileNotFoundError, OSError) as e:
+                    # Skip inaccessible files (broken symlinks, permission denied, etc.)
+                    logger.debug(f"Skipping inaccessible file {file_path}: {e}")
+                    continue
             
             logger.debug(f"Found {log_files_count} log files, latest update: {latest_time}")
             return latest_time
