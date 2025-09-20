@@ -490,18 +490,22 @@ class SingleFileTailWatcher:
                     logger.info(f"Decoded {len(new_data)} bytes to {len(new_lines)} lines")
                     
                     # Process each line
-                    for line in new_lines:
+                    for line_idx, line in enumerate(new_lines):
                         line = line.strip()
                         if line:
                             self.line_buffer.append(line)
                             lines_read += 1
-                            if lines_read % 10 == 0:  # Log every 10 lines
-                                logger.info(f"Read {lines_read} lines, buffer size: {len(self.line_buffer)}")
+                            if lines_read % 100000 == 0:  # Log every 100k lines
+                                logger.info(f"Processed {lines_read} lines so far, buffer size: {len(self.line_buffer)}")
                             
                             # Process batch when full or timeout reached
                             if (len(self.line_buffer) >= self.batch_size or 
                                 self._should_process_batch()):
                                 await self._process_batch()
+                        
+                        # Log progress every 500k lines processed
+                        if (line_idx + 1) % 500000 == 0:
+                            logger.info(f"Line processing progress: {line_idx + 1}/{len(new_lines)} lines processed")
                     
                     # Update our position
                     self.file_position = file_size
