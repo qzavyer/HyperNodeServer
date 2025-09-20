@@ -491,34 +491,17 @@ class SingleFileTailWatcher:
                     new_lines = new_text.split('\n')
                     logger.info(f"Decoded {len(new_data)} bytes to {len(new_lines)} lines")
                     
-                    # Log before entering the line processing loop
-                    logger.info(f"About to process {len(new_lines)} lines, current buffer size: {len(self.line_buffer)}")
-                    
                     # Process each line
                     for line_idx, line in enumerate(new_lines):
-                        # Log first iteration to confirm we entered the loop
-                        if line_idx == 0:
-                            logger.info(f"Entered line processing loop, processing first line")
-                        
                         line = line.strip()
                         if line:
                             self.line_buffer.append(line)
                             lines_read += 1
-                            if lines_read % 100000 == 0:  # Log every 100k lines
-                                logger.info(f"Processed {lines_read} lines so far, buffer size: {len(self.line_buffer)}")
                             
                             # Process batch when full or timeout reached
                             if (len(self.line_buffer) >= self.batch_size or 
                                 self._should_process_batch()):
-                                logger.info(f"Triggering batch process: buffer_len={len(self.line_buffer)}, batch_size={self.batch_size}")
                                 await self._process_batch()
-                        
-                        # Log progress every 500k lines processed
-                        if (line_idx + 1) % 500000 == 0:
-                            logger.info(f"Line processing progress: {line_idx + 1}/{len(new_lines)} lines processed")
-                    
-                    # Log completion of line processing
-                    logger.info(f"Completed processing {len(new_lines)} lines, total lines_read: {lines_read}")
 
             except Exception as e:
                 logger.error(f"Error reading new data: {e}")
@@ -680,25 +663,17 @@ class SingleFileTailWatcher:
     
     async def _process_batch(self) -> None:
         """Process a batch of lines for maximum performance with parallel processing."""
-        logger.info(f"_process_batch called with {len(self.line_buffer)} lines in buffer")
-        
         if not self.line_buffer:
-            logger.info("_process_batch: no lines in buffer, returning")
             return
             
         try:
-            logger.info(f"_process_batch: buffer_size={len(self.line_buffer)}, parallel_batch_size={self.parallel_batch_size}")
-            
             # Use parallel processing for large batches
             if len(self.line_buffer) >= self.parallel_batch_size:
-                logger.info("_process_batch: using parallel processing")
                 orders = await self._process_batch_parallel(self.line_buffer)
             else:
-                logger.info("_process_batch: using sequential processing")
                 orders = await self._process_batch_sequential(self.line_buffer)
             
-            logger.info(f"_process_batch: processing completed, {len(orders)} orders extracted")
-            print(f"Processed batch of {len(orders)} orders")
+            logger.info(f"Processed batch of {len(orders)} orders")
 
             # Process all orders at once
             if orders:
@@ -726,55 +701,32 @@ class SingleFileTailWatcher:
     
     async def _process_batch_sequential(self, lines: List[str]) -> List:
         """Process batch sequentially for small batches."""
-        logger.info(f"_process_batch_sequential: starting to process {len(lines)} lines")
         orders = []
-        for i, line in enumerate(lines):
-            if i % 1000 == 0:  # Log every 1000 lines
-                logger.info(f"_process_batch_sequential: processing line {i}/{len(lines)}")
+        for line in lines:
             order = self._parse_line_optimized(line)
             if order:
                 orders.append(order)
-        logger.info(f"_process_batch_sequential: completed processing {len(lines)} lines, extracted {len(orders)} orders")
         return orders
     
     async def _process_batch_parallel(self, lines: List[str]) -> List:
         """Process batch in parallel for large batches."""
-        logger.info(f"_process_batch_parallel: starting to process {len(lines)} lines")
-        
         # Split lines into chunks for parallel processing
         chunk_size = max(1, len(lines) // self.parallel_workers)
         chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
-        logger.info(f"_process_batch_parallel: split into {len(chunks)} chunks, chunk_size={chunk_size}")
         
         # Process chunks in parallel
         loop = asyncio.get_event_loop()
         tasks = []
-        for i, chunk in enumerate(chunks):
-            logger.info(f"_process_batch_parallel: creating task {i+1}/{len(chunks)} for chunk of {len(chunk)} lines")
+        for chunk in chunks:
             task = loop.run_in_executor(self.executor, self._parse_chunk_sync, chunk)
             tasks.append(task)
         
-        logger.info(f"_process_batch_parallel: waiting for {len(tasks)} tasks to complete")
         # Wait for all chunks to complete
         try:
-            logger.info(f"_process_batch_parallel: calling asyncio.gather for {len(tasks)} tasks")
-            # Add timeout to prevent infinite hanging
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True), 
-                timeout=30.0  # 30 second timeout
-            )
-            logger.info(f"_process_batch_parallel: asyncio.gather returned with {len(results)} results")
-        except asyncio.TimeoutError:
-            logger.error(f"_process_batch_parallel: asyncio.gather timed out after 30 seconds")
-            # Cancel remaining tasks
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            raise
+            results = await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
-            logger.error(f"_process_batch_parallel: asyncio.gather failed: {e}")
+            logger.error(f"Parallel batch processing failed: {e}")
             raise
-        logger.info(f"_process_batch_parallel: all tasks completed, processing results")
         
         # Combine results
         orders = []
@@ -788,15 +740,11 @@ class SingleFileTailWatcher:
     
     def _parse_chunk_sync(self, lines: List[str]) -> List:
         """Synchronous parsing of a chunk of lines (for thread pool)."""
-        print(f"_parse_chunk_sync: starting to process {len(lines)} lines")
         orders = []
-        for i, line in enumerate(lines):
-            if i % 1000 == 0:  # Log every 1000 lines
-                print(f"_parse_chunk_sync: processing line {i}/{len(lines)}")
+        for line in lines:
             order = self._parse_line_optimized(line)
             if order:
                 orders.append(order)
-        print(f"_parse_chunk_sync: completed processing {len(lines)} lines, extracted {len(orders)} orders")
         return orders
     
     @lru_cache(maxsize=1000)
