@@ -680,16 +680,24 @@ class SingleFileTailWatcher:
     
     async def _process_batch(self) -> None:
         """Process a batch of lines for maximum performance with parallel processing."""
+        logger.info(f"_process_batch called with {len(self.line_buffer)} lines in buffer")
+        
         if not self.line_buffer:
+            logger.info("_process_batch: no lines in buffer, returning")
             return
             
         try:
+            logger.info(f"_process_batch: buffer_size={len(self.line_buffer)}, parallel_batch_size={self.parallel_batch_size}")
+            
             # Use parallel processing for large batches
             if len(self.line_buffer) >= self.parallel_batch_size:
+                logger.info("_process_batch: using parallel processing")
                 orders = await self._process_batch_parallel(self.line_buffer)
             else:
+                logger.info("_process_batch: using sequential processing")
                 orders = await self._process_batch_sequential(self.line_buffer)
             
+            logger.info(f"_process_batch: processing completed, {len(orders)} orders extracted")
             print(f"Processed batch of {len(orders)} orders")
 
             # Process all orders at once
@@ -718,11 +726,15 @@ class SingleFileTailWatcher:
     
     async def _process_batch_sequential(self, lines: List[str]) -> List:
         """Process batch sequentially for small batches."""
+        logger.info(f"_process_batch_sequential: starting to process {len(lines)} lines")
         orders = []
-        for line in lines:
+        for i, line in enumerate(lines):
+            if i % 1000 == 0:  # Log every 1000 lines
+                logger.info(f"_process_batch_sequential: processing line {i}/{len(lines)}")
             order = self._parse_line_optimized(line)
             if order:
                 orders.append(order)
+        logger.info(f"_process_batch_sequential: completed processing {len(lines)} lines, extracted {len(orders)} orders")
         return orders
     
     async def _process_batch_parallel(self, lines: List[str]) -> List:
