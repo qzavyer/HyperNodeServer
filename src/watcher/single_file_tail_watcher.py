@@ -471,6 +471,8 @@ class SingleFileTailWatcher:
             logger.error(f"Error checking file position: {e}")
             return
         
+        self.file_position = file_size
+        
         if new_data_bytes == 0:
             logger.info("No new data available, file not growing")
             return
