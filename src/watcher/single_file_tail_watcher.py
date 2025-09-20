@@ -679,6 +679,8 @@ class SingleFileTailWatcher:
             else:
                 orders = await self._process_batch_sequential(self.line_buffer)
             
+            print(f"Processed batch of {len(orders)} orders")
+
             # Process all orders at once
             if orders:
                 await self.order_manager.update_orders_batch_async(orders)
@@ -772,17 +774,12 @@ class SingleFileTailWatcher:
     
     def _parse_line_optimized(self, line: str) -> Optional:
         """Optimized line parsing with JSON caching and pre-filtering."""
-        print("_parse_line_optimized - START")
         if not line.strip():
-            print("_parse_line_optimized - EMPTY LINE")
             return None
         
         # Pre-filtering: reject obviously invalid lines
-        print("_parse_line_optimized - BEFORE PRE_FILTER")
         if not self._pre_filter_line(line):
-            print("_parse_line_optimized - PRE_FILTER REJECTED")
             return None
-        print("_parse_line_optimized - PRE_FILTER PASSED")
             
         try:
             # JSON optimization: cache parsed JSON for identical lines
@@ -798,9 +795,7 @@ class SingleFileTailWatcher:
                     self.cache_misses += 1
             
             # Parse the line
-            print("_parse_line_optimized - BEFORE PARSER.PARSE_LINE")
             order = self.parser.parse_line(line)
-            print("_parse_line_optimized - AFTER PARSER.PARSE_LINE")
             
             # Cache the result if JSON optimization is enabled
             if self.json_optimization and order:
