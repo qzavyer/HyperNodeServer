@@ -88,6 +88,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Configure WebSocket settings
+app.websocket_max_size = 1024 * 1024  # 1MB max message size
+app.websocket_keep_alive = True
+app.websocket_keep_alive_interval = 20  # 20 seconds
+
 # Add middleware for performance and security
 app.add_middleware(TimeoutMiddleware, timeout_seconds=60)  # 60 second timeout
 app.add_middleware(PerformanceMiddleware)

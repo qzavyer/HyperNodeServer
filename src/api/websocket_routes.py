@@ -1,5 +1,6 @@
 """WebSocket routes for real-time order updates."""
 
+import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from src.websocket.websocket_manager import WebSocketManager
 from src.utils.logger import get_logger
@@ -38,8 +39,8 @@ async def websocket_order_update(websocket: WebSocket):
         return
     
     try:
-        # Принимаем соединение
-        await websocket.accept()
+        # Принимаем соединение с таймаутом
+        await asyncio.wait_for(websocket.accept(), timeout=30.0)
         logger.info("✅ WebSocket orderUpdate connection accepted")
         
         # Подключаем к менеджеру
@@ -100,8 +101,8 @@ async def websocket_order_batch(websocket: WebSocket):
         return
     
     try:
-        # Принимаем соединение
-        await websocket.accept()
+        # Принимаем соединение с таймаутом
+        await asyncio.wait_for(websocket.accept(), timeout=30.0)
         logger.info("✅ WebSocket orderBatch connection accepted")
         
         # Подключаем к менеджеру

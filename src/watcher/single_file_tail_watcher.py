@@ -20,6 +20,7 @@ from watchdog.events import FileSystemEventHandler, FileCreatedEvent
 from src.parser.log_parser import LogParser
 from src.storage.order_manager import OrderManager
 from src.monitoring.resource_monitor import ResourceMonitor
+from src.cleanup.directory_cleaner import DirectoryCleaner
 from src.utils.logger import get_logger
 from config.settings import settings
 
@@ -107,6 +108,11 @@ class SingleFileTailWatcher:
         # Streaming state
         self.stream_buffer = bytearray()
         self.stream_position = 0
+        
+        # Directory cleaner for automatic cleanup on disk space issues
+        self.directory_cleaner = DirectoryCleaner(base_dir=str(self.logs_path), single_file_watcher=self)
+        self.last_cleanup_time = 0
+        self.cleanup_cooldown = 300  # 5 minutes cooldown between cleanups
         
         # Pre-filtering patterns for fast line validation (compiled once)
         self.valid_line_patterns = [
@@ -363,6 +369,17 @@ class SingleFileTailWatcher:
                 throttle_factor = self.resource_monitor.get_throttle_factor()
                 await asyncio.sleep(self.tail_interval * throttle_factor)
                 
+            except OSError as e:
+                if e.errno == 28:  # No space left on device
+                    logger.error("🚨 No space left on device detected in tail loop! Starting emergency cleanup...")
+                    cleanup_performed = await self._emergency_cleanup_if_needed()
+                    if cleanup_performed:
+                        logger.info("✅ Emergency cleanup completed, continuing...")
+                    else:
+                        logger.error("❌ Emergency cleanup failed or not needed")
+                else:
+                    logger.error(f"OSError in tail loop: {e}")
+                await asyncio.sleep(1)
             except Exception as e:
                 logger.error(f"Error in tail loop: {e}")
                 # If file disappeared, rescan
@@ -385,6 +402,16 @@ class SingleFileTailWatcher:
                 try:
                     file_stat = self.current_file_path.stat()
                     logger.info(f"Reading file: {self.current_file_path.name}, size: {file_stat.st_size} bytes, modified: {file_stat.st_mtime}")
+                except OSError as e:
+                    if e.errno == 28:  # No space left on device
+                        logger.error("🚨 No space left on device detected! Starting emergency cleanup...")
+                        cleanup_performed = await self._emergency_cleanup_if_needed()
+                        if cleanup_performed:
+                            logger.info("✅ Emergency cleanup completed, continuing...")
+                        else:
+                            logger.error("❌ Emergency cleanup failed or not needed")
+                    else:
+                        logger.warning(f"Could not get file stats: {e}")
                 except Exception as e:
                     logger.warning(f"Could not get file stats: {e}")
             
@@ -396,6 +423,16 @@ class SingleFileTailWatcher:
             else:
                 await self._read_traditional_lines()
                         
+        except OSError as e:
+            if e.errno == 28:  # No space left on device
+                logger.error("🚨 No space left on device detected in _read_new_lines! Starting emergency cleanup...")
+                cleanup_performed = await self._emergency_cleanup_if_needed()
+                if cleanup_performed:
+                    logger.info("✅ Emergency cleanup completed, continuing...")
+                else:
+                    logger.error("❌ Emergency cleanup failed or not needed")
+            else:
+                logger.error(f"OSError reading lines from {self.current_file_path}: {e}")
         except Exception as e:
             logger.error(f"Error reading lines from {self.current_file_path}: {e}")
             raise
@@ -881,3 +918,43 @@ class SingleFileTailWatcher:
             "resource_monitor": self.resource_monitor.get_status(),
             "resource_usage": self.resource_monitor.check_resources()
         }
+    
+    async def _emergency_cleanup_if_needed(self) -> bool:
+        """Perform emergency cleanup if disk space is low.
+        
+        Returns:
+            bool: True if cleanup was performed, False otherwise
+        """
+        try:
+            current_time = time.time()
+            
+            # Check cooldown to avoid excessive cleanup
+            if current_time - self.last_cleanup_time < self.cleanup_cooldown:
+                return False
+            
+            # Check disk space
+            disk_usage = psutil.disk_usage(self.logs_path)
+            free_space_gb = disk_usage.free / (1024**3)
+            
+            # If less than 1GB free space, trigger cleanup
+            if free_space_gb < 1.0:
+                logger.warning(f"🚨 Low disk space detected: {free_space_gb:.2f}GB free. Starting emergency cleanup...")
+                
+                # Perform cleanup
+                removed_dirs, removed_files = await self.directory_cleaner.cleanup_async()
+                
+                self.last_cleanup_time = current_time
+                
+                # Check space after cleanup
+                disk_usage_after = psutil.disk_usage(self.logs_path)
+                free_space_after_gb = disk_usage_after.free / (1024**3)
+                
+                logger.info(f"✅ Emergency cleanup completed: removed {removed_dirs} dirs, {removed_files} files. Free space: {free_space_after_gb:.2f}GB")
+                
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error during emergency cleanup: {e}")
+            return False
