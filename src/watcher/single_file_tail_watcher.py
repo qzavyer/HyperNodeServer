@@ -491,8 +491,15 @@ class SingleFileTailWatcher:
                     new_lines = new_text.split('\n')
                     logger.info(f"Decoded {len(new_data)} bytes to {len(new_lines)} lines")
                     
+                    # Log before entering the line processing loop
+                    logger.info(f"About to process {len(new_lines)} lines, current buffer size: {len(self.line_buffer)}")
+                    
                     # Process each line
                     for line_idx, line in enumerate(new_lines):
+                        # Log first iteration to confirm we entered the loop
+                        if line_idx == 0:
+                            logger.info(f"Entered line processing loop, processing first line")
+                        
                         line = line.strip()
                         if line:
                             self.line_buffer.append(line)
@@ -503,11 +510,15 @@ class SingleFileTailWatcher:
                             # Process batch when full or timeout reached
                             if (len(self.line_buffer) >= self.batch_size or 
                                 self._should_process_batch()):
+                                logger.info(f"Triggering batch process: buffer_len={len(self.line_buffer)}, batch_size={self.batch_size}")
                                 await self._process_batch()
                         
                         # Log progress every 500k lines processed
                         if (line_idx + 1) % 500000 == 0:
                             logger.info(f"Line processing progress: {line_idx + 1}/{len(new_lines)} lines processed")
+                    
+                    # Log completion of line processing
+                    logger.info(f"Completed processing {len(new_lines)} lines, total lines_read: {lines_read}")
 
             except Exception as e:
                 logger.error(f"Error reading new data: {e}")
