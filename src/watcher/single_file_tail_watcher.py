@@ -155,6 +155,7 @@ class SingleFileTailWatcher:
         self.total_lines_processed = 0
         self.total_orders_processed = 0
         self.last_performance_log = 0
+        self.last_orders_log = 0
         
         # JSON optimization cache with size limit
         self.json_cache = {}
@@ -679,7 +680,13 @@ class SingleFileTailWatcher:
             if orders:
                 await self.order_manager.update_orders_batch_async(orders)
                 self.total_orders_processed += len(orders)
-                # logger.info(f"Processed batch of {len(orders)} orders")
+                
+                # Log every 1000 orders with timestamp of last order
+                if self.total_orders_processed - self.last_orders_log >= 1000:
+                    last_order_timestamp = orders[-1].timestamp if orders else None
+                    timestamp_str = last_order_timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] if last_order_timestamp else "N/A"
+                    logger.info(f"Processed {self.total_orders_processed} orders total, last order timestamp: {timestamp_str}")
+                    self.last_orders_log = self.total_orders_processed
             
             # Update counters
             self.total_lines_processed += len(self.line_buffer)

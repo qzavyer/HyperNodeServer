@@ -12,6 +12,8 @@ class OrderExtractor:
     
     def __init__(self):
         self.logger = get_logger(__name__)
+        self.filtered_orders_count = 0
+        self.unknown_status_count = 0
     
     def extract_order(self, log_entry: dict) -> Optional['Order']:
         """Извлекает Order из нового формата лога."""
@@ -47,17 +49,23 @@ class OrderExtractor:
                 "reduceOnlyRejected",
                 "scheduledCancel",
                 "selfTradeCanceled",
-                "siblingFilledCanceled"
+                "siblingFilledCanceled",
+                "positionIncreaseAtOpenInterestCapRejected",
+                "positionFlipAtOpenInterestCapRejected"
             ]
 
             if status in not_created_statuses:
+                self.filtered_orders_count += 1
                 return None
 
             if status not in ["filled", "triggered", "open", "canceled"]:
+                self.unknown_status_count += 1
                 self.logger.warning(f"Неизвестный статус ордера: {status}")
-                return None
+                # Не возвращаем None, а создаем ордер с неизвестным статусом
+                # чтобы он попал в батч и был обработан
+                pass  # Продолжаем создание ордера
             
-            return Order(
+            order = Order(
                 id=str(order_data.get("oid")),
                 symbol=order_data.get("coin"),
                 side=side,
@@ -67,6 +75,13 @@ class OrderExtractor:
                 timestamp=datetime.fromisoformat(log_entry.get("time")),
                 status=status
             )
+            
+            # Логируем статистику каждые 1000 ордеров
+            total_processed = self.filtered_orders_count + self.unknown_status_count + 1
+            if total_processed % 1000 == 0:
+                self.logger.info(f"OrderExtractor stats: processed={total_processed}, filtered={self.filtered_orders_count}, unknown_status={self.unknown_status_count}")
+            
+            return order
         except Exception as e:
             self.logger.warning(f"Ошибка извлечения ордера: {e}\n{log_entry}")
             return None
