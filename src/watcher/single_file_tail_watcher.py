@@ -678,8 +678,13 @@ class SingleFileTailWatcher:
         
         # Логируем статистику OrderExtractor каждые 1000 обработанных строк
         if self.global_lines_processed > 0 and self.global_lines_processed % 1000 == 0:
+            logger.info(f"Triggering OrderExtractor stats logging at {self.global_lines_processed} lines")
+            print(f"Triggering OrderExtractor stats logging at {self.global_lines_processed} lines")
             if hasattr(self.parser, '_log_detailed_stats'):
                 self.parser._log_detailed_stats()
+            else:
+                logger.error("Parser does not have _log_detailed_stats method")
+                print("Parser does not have _log_detailed_stats method")
             
         try:
             # Use parallel processing for large batches
@@ -844,6 +849,11 @@ class SingleFileTailWatcher:
         
         # Увеличиваем глобальный счетчик для всех строк, прошедших pre-filter
         self.global_lines_processed += 1
+        
+        # Диагностика: логируем каждые 500 строк
+        if self.global_lines_processed % 500 == 0:
+            logger.info(f"Global lines processed: {self.global_lines_processed}")
+            print(f"Global lines processed: {self.global_lines_processed}")
         
         # Diagnostic: log every 1000 lines to see what we're processing
         if hasattr(self, '_parse_line_count'):
