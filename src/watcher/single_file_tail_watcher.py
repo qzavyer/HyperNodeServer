@@ -795,6 +795,11 @@ class SingleFileTailWatcher:
         if len(lines) > 0:
             logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders")
             print(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders")
+            
+            # Логируем статистику OrderExtractor каждые 1000 обработанных строк
+            if hasattr(self, '_total_lines_processed') and self._total_lines_processed % 1000 == 0:
+                if hasattr(self.parser, '_log_detailed_stats'):
+                    self.parser._log_detailed_stats()
         
         return orders
     
@@ -835,6 +840,12 @@ class SingleFileTailWatcher:
         # Pre-filtering: reject obviously invalid lines
         if not self._pre_filter_line(line):
             return None
+        
+        # Увеличиваем счетчик для всех строк, прошедших pre-filter
+        if hasattr(self, '_total_lines_processed'):
+            self._total_lines_processed += 1
+        else:
+            self._total_lines_processed = 1
         
         # Diagnostic: log every 1000 lines to see what we're processing
         if hasattr(self, '_parse_line_count'):
