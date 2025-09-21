@@ -741,18 +741,27 @@ class SingleFileTailWatcher:
         
         # Wait for all chunks to complete
         try:
+            logger.info(f"Starting asyncio.gather with {len(tasks)} tasks")
+            print(f"Starting asyncio.gather with {len(tasks)} tasks")
             results = await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info(f"asyncio.gather completed with {len(results)} results")
+            print(f"asyncio.gather completed with {len(results)} results")
         except Exception as e:
             logger.error(f"Parallel batch processing failed: {e}")
+            print(f"Parallel batch processing failed: {e}")
             raise
         
         # Combine results
         orders = []
-        for result in results:
+        for i, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error(f"Error in parallel processing: {result}")
+                logger.error(f"Error in parallel processing chunk {i}: {result}")
+                print(f"Error in parallel processing chunk {i}: {result}")
             else:
                 orders.extend(result)
+        
+        logger.info(f"Parallel processing completed: {len(orders)} total orders")
+        print(f"Parallel processing completed: {len(orders)} total orders")
         
         return orders
     
