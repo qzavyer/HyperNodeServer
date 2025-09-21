@@ -739,24 +739,31 @@ class SingleFileTailWatcher:
             task = loop.run_in_executor(self.executor, self._parse_chunk_sync, chunk)
             tasks.append(task)
         
-        # Wait for all chunks to complete with timeout
+        # Wait for all chunks to complete with individual timeouts
         try:
             logger.info(f"Starting asyncio.gather with {len(tasks)} tasks")
             print(f"Starting asyncio.gather with {len(tasks)} tasks")
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True), 
-                timeout=30.0
-            )
-            logger.info(f"asyncio.gather completed with {len(results)} results")
-            print(f"asyncio.gather completed with {len(results)} results")
-        except asyncio.TimeoutError:
-            logger.error("Parallel batch processing timed out after 30 seconds")
-            print("Parallel batch processing timed out after 30 seconds")
-            # Cancel remaining tasks
-            for task in tasks:
-                if not task.done():
+            
+            # Wait for each task individually with timeout
+            results = []
+            for i, task in enumerate(tasks):
+                try:
+                    result = await asyncio.wait_for(task, timeout=10.0)
+                    results.append(result)
+                    logger.info(f"Task {i} completed successfully")
+                    print(f"Task {i} completed successfully")
+                except asyncio.TimeoutError:
+                    logger.error(f"Task {i} timed out after 10 seconds, cancelling")
+                    print(f"Task {i} timed out after 10 seconds, cancelling")
                     task.cancel()
-            raise
+                    results.append(Exception(f"Task {i} timed out"))
+                except Exception as e:
+                    logger.error(f"Task {i} failed: {e}")
+                    print(f"Task {i} failed: {e}")
+                    results.append(e)
+            
+            logger.info(f"All tasks processed: {len(results)} results")
+            print(f"All tasks processed: {len(results)} results")
         except Exception as e:
             logger.error(f"Parallel batch processing failed: {e}")
             print(f"Parallel batch processing failed: {e}")
