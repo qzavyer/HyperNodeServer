@@ -729,6 +729,9 @@ class SingleFileTailWatcher:
         chunk_size = max(1, len(lines) // self.parallel_workers)
         chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
         
+        logger.info(f"Parallel processing {len(lines)} lines in {len(chunks)} chunks")
+        print(f"Parallel processing {len(lines)} lines in {len(chunks)} chunks")
+        
         # Process chunks in parallel
         loop = asyncio.get_event_loop()
         tasks = []
@@ -760,6 +763,12 @@ class SingleFileTailWatcher:
             order = self._parse_line_optimized(line)
             if order:
                 orders.append(order)
+        
+        # Diagnostic: log chunk processing results
+        if len(lines) > 0:
+            logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders")
+            print(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders")
+        
         return orders
     
     @lru_cache(maxsize=1000)
