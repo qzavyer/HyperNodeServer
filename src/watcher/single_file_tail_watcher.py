@@ -771,6 +771,11 @@ class SingleFileTailWatcher:
                 return True
         
         self.pre_filter_rejected += 1
+        
+        # Diagnostic: log every 100 rejected lines
+        if self.pre_filter_rejected % 100 == 0:
+            logger.info(f"Pre-filter rejected {self.pre_filter_rejected} lines, last: {line[:50]}...")
+        
         return False
     
     def _check_resource_usage(self) -> bool:
@@ -785,6 +790,15 @@ class SingleFileTailWatcher:
         # Pre-filtering: reject obviously invalid lines
         if not self._pre_filter_line(line):
             return None
+        
+        # Diagnostic: log every 1000 lines to see what we're processing
+        if hasattr(self, '_parse_line_count'):
+            self._parse_line_count += 1
+        else:
+            self._parse_line_count = 1
+            
+        if self._parse_line_count % 1000 == 0:
+            logger.info(f"Parsing line {self._parse_line_count}: {line[:100]}...")
             
         try:
             # JSON optimization: cache parsed JSON for identical lines
