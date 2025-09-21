@@ -849,11 +849,11 @@ class SingleFileTailWatcher:
         if self.global_lines_processed > 0 and self.global_lines_processed % 1000 == 0:
             logger.info(f"Triggering OrderExtractor stats logging at {self.global_lines_processed} lines")
             print(f"Triggering OrderExtractor stats logging at {self.global_lines_processed} lines")
-            if hasattr(self.parser, '_log_detailed_stats'):
-                self.parser._log_detailed_stats()
+            if hasattr(self.parser, 'order_extractor') and hasattr(self.parser.order_extractor, '_log_detailed_stats'):
+                self.parser.order_extractor._log_detailed_stats()
             else:
-                logger.error("Parser does not have _log_detailed_stats method")
-                print("Parser does not have _log_detailed_stats method")
+                logger.error("OrderExtractor does not have _log_detailed_stats method")
+                print("OrderExtractor does not have _log_detailed_stats method")
         
         # Diagnostic: log every 1000 lines to see what we're processing
         if hasattr(self, '_parse_line_count'):
