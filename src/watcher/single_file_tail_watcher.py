@@ -739,13 +739,24 @@ class SingleFileTailWatcher:
             task = loop.run_in_executor(self.executor, self._parse_chunk_sync, chunk)
             tasks.append(task)
         
-        # Wait for all chunks to complete
+        # Wait for all chunks to complete with timeout
         try:
             logger.info(f"Starting asyncio.gather with {len(tasks)} tasks")
             print(f"Starting asyncio.gather with {len(tasks)} tasks")
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True), 
+                timeout=30.0
+            )
             logger.info(f"asyncio.gather completed with {len(results)} results")
             print(f"asyncio.gather completed with {len(results)} results")
+        except asyncio.TimeoutError:
+            logger.error("Parallel batch processing timed out after 30 seconds")
+            print("Parallel batch processing timed out after 30 seconds")
+            # Cancel remaining tasks
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            raise
         except Exception as e:
             logger.error(f"Parallel batch processing failed: {e}")
             print(f"Parallel batch processing failed: {e}")
