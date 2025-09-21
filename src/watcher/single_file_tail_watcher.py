@@ -499,6 +499,11 @@ class SingleFileTailWatcher:
                             self.line_buffer.append(line)
                             lines_read += 1
                             
+                            # Log every 1000 lines added to buffer
+                            if lines_read % 1000 == 0:
+                                logger.info(f"Added {lines_read} lines to buffer, buffer size: {len(self.line_buffer)}")
+                                print(f"Added {lines_read} lines to buffer, buffer size: {len(self.line_buffer)}")
+                            
                             # Process batch when full or timeout reached
                             if (len(self.line_buffer) >= self.batch_size or 
                                 self._should_process_batch()):
@@ -667,6 +672,9 @@ class SingleFileTailWatcher:
         if not self.line_buffer:
             return
             
+        logger.info(f"Processing batch of {len(self.line_buffer)} lines")
+        print(f"Processing batch of {len(self.line_buffer)} lines")
+            
         try:
             # Use parallel processing for large batches
             if len(self.line_buffer) >= self.parallel_batch_size:
@@ -775,6 +783,7 @@ class SingleFileTailWatcher:
         # Diagnostic: log every 100 rejected lines
         if self.pre_filter_rejected % 100 == 0:
             logger.info(f"Pre-filter rejected {self.pre_filter_rejected} lines, last: {line[:50]}...")
+            print(f"Pre-filter rejected {self.pre_filter_rejected} lines, last: {line[:50]}...")
         
         return False
     
@@ -799,6 +808,7 @@ class SingleFileTailWatcher:
             
         if self._parse_line_count % 1000 == 0:
             logger.info(f"Parsing line {self._parse_line_count}: {line[:100]}...")
+            print(f"Parsing line {self._parse_line_count}: {line[:100]}...")
             
         try:
             # JSON optimization: cache parsed JSON for identical lines
