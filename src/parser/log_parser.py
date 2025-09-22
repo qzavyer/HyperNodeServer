@@ -28,6 +28,7 @@ class LogParser:
         self.logger = get_logger(__name__)
         self.chunk_size = chunk_size
         self.batch_size = batch_size
+        self.order_extractor = OrderExtractor()
     
     def parse_file(self, file_path: str) -> List['Order']:
         """Parse log file and extract orders (synchronous, for backward compatibility).
@@ -209,8 +210,7 @@ class LogParser:
         Returns:
             Order object if valid data, None otherwise
         """
-        extractor = OrderExtractor()
-        return extractor.extract_order(data)
+        return self.order_extractor.extract_order(data)
     
     def _create_order_from_data(self, data: Dict[str, Any]) -> Optional['Order']:
         """Create order from cached JSON data (optimized version).
