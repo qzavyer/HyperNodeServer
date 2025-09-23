@@ -36,13 +36,23 @@ class TestHealthAPI:
         )
     
     def test_basic_health_check(self):
-        """Test basic health check endpoint."""
+        """Test enhanced health check endpoint."""
         response = client.get("/api/v1/health")
         
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "healthy"
-        assert data["service"] == "hyperliquid-node-parser"
+        assert data["status"] == "success"
+        assert "data" in data
+        assert "timestamp" in data
+        
+        # Check data structure
+        health_data = data["data"]
+        assert "nodeStatus" in health_data
+        assert "lastUpdate" in health_data
+        assert "errorCount" in health_data
+        assert "responseTime" in health_data
+        assert "uptime" in health_data
+        assert "criticalAlerts" in health_data
     
     @patch('src.main.node_health_monitor')
     def test_node_health_status_success(self, mock_monitor):
@@ -200,3 +210,35 @@ class TestHealthAPI:
             data = response.json()
             assert data["status"] == expected_status
             assert data["threshold_minutes"] == threshold
+    
+    def test_health_endpoint_metrics(self):
+        """Test health endpoint returns correct metrics structure."""
+        response = client.get("/api/v1/health")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Check response structure
+        assert data["status"] == "success"
+        assert "data" in data
+        assert "timestamp" in data
+        
+        # Check data metrics
+        health_data = data["data"]
+        required_fields = [
+            "nodeStatus", "lastUpdate", "errorCount", 
+            "responseTime", "uptime", "criticalAlerts"
+        ]
+        
+        for field in required_fields:
+            assert field in health_data, f"Missing field: {field}"
+        
+        # Check field types
+        assert isinstance(health_data["nodeStatus"], str)
+        assert isinstance(health_data["errorCount"], int)
+        assert isinstance(health_data["responseTime"], (int, float))
+        assert isinstance(health_data["uptime"], (int, float))
+        assert isinstance(health_data["criticalAlerts"], list)
+        
+        # Check nodeStatus values
+        assert health_data["nodeStatus"] in ["online", "offline", "degraded"]

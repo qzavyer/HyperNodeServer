@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any
+from datetime import datetime, timezone
 
 from src.monitoring.node_health_monitor import NodeHealthMonitor, NodeHealthStatus
 
@@ -57,10 +58,33 @@ async def get_node_health_status(
         )
 
 @router.get("/health")
-async def health_check() -> Dict[str, str]:
-    """Basic health check endpoint.
+async def health_check() -> Dict[str, Any]:
+    """Enhanced health check endpoint with metrics.
     
     Returns:
-        Simple health status
+        Health status with metrics
     """
-    return {"status": "healthy", "service": "hyperliquid-node-parser"}
+    try:
+        monitor = get_node_health_monitor()
+        status = monitor.get_health_status()
+        return {
+            "status": "success",
+            "data": status.to_dict(),
+            "timestamp": status.check_timestamp.isoformat()
+        }
+    except Exception as e:
+        from src.utils.logger import get_logger
+        logger = get_logger(__name__)
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "error",
+            "data": {
+                "nodeStatus": "offline",
+                "lastUpdate": None,
+                "errorCount": 0,
+                "responseTime": 0.0,
+                "uptime": 0.0,
+                "criticalAlerts": []
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
