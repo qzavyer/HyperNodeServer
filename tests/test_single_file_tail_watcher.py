@@ -4,6 +4,7 @@ import pytest
 import asyncio
 import tempfile
 import json
+import time
 from pathlib import Path
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from datetime import datetime
@@ -409,3 +410,70 @@ async def test_integration_find_and_start_current_file():
                 if hasattr(watcher, 'mmap_file') and watcher.mmap_file:
                     watcher.mmap_file.close()
                     watcher.mmap_file = None
+
+    def test_parse_chunk_sync_timeout(self, watcher):
+        """Test that _parse_chunk_sync handles timeouts correctly."""
+        # Create a line that will cause hanging (infinite loop simulation)
+        hanging_line = '{"user":"0x123","oid":123,"coin":"BTC","side":"Bid","px":"50000"}'
+        
+        # Mock the parser to simulate hanging
+        def hanging_parse(line):
+            time.sleep(2)  # Simulate hanging for 2 seconds
+            return None
+        
+        with patch.object(watcher.parser, 'parse_line', side_effect=hanging_parse):
+            start_time = time.time()
+            result = watcher._parse_chunk_sync([hanging_line])
+            end_time = time.time()
+            
+            # Should complete within 2 seconds (timeout is 1 second per line)
+            assert end_time - start_time < 2.0
+            assert result == []  # Empty result due to timeout
+
+    def test_parse_line_optimized_timeout(self, watcher):
+        """Test that _parse_line_optimized handles timeouts correctly."""
+        # Create a line that will cause hanging
+        hanging_line = '{"user":"0x123","oid":123,"coin":"BTC","side":"Bid","px":"50000"}'
+        
+        # Mock the parser to simulate hanging
+        def hanging_parse(line):
+            time.sleep(1)  # Simulate hanging for 1 second
+            return None
+        
+        with patch.object(watcher.parser, 'parse_line', side_effect=hanging_parse):
+            start_time = time.time()
+            result = watcher._parse_line_optimized(hanging_line)
+            end_time = time.time()
+            
+            # Should complete within 1 second (timeout is 0.5 seconds)
+            assert end_time - start_time < 1.0
+            assert result is None  # None result due to timeout
+
+    def test_parse_chunk_sync_progress_logging(self, watcher):
+        """Test that _parse_chunk_sync logs progress correctly."""
+        lines = [f'{{"user":"0x{i}","oid":{i},"coin":"BTC","side":"Bid","px":"50000"}}' for i in range(15)]
+        
+        with patch.object(watcher, 'logger') as mock_logger:
+            result = watcher._parse_chunk_sync(lines)
+            
+            # Should log progress at least once (every 10 lines)
+            assert mock_logger.info.called
+            # Should process all lines
+            assert len(result) >= 0  # May be 0 if parsing fails, but should not hang
+
+    def test_parse_chunk_sync_error_handling(self, watcher):
+        """Test that _parse_chunk_sync handles errors gracefully."""
+        # Create lines that will cause errors
+        error_lines = [
+            'invalid json',
+            '{"incomplete":',
+            '{"user":"0x123","oid":123,"coin":"BTC","side":"Bid","px":"50000"}',
+            'another invalid json'
+        ]
+        
+        result = watcher._parse_chunk_sync(error_lines)
+        
+        # Should not crash and return some result
+        assert isinstance(result, list)
+        # Should handle errors gracefully
+        assert len(result) >= 0

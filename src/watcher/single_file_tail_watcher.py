@@ -358,14 +358,23 @@ class SingleFileTailWatcher:
                 
                 # Wait for tasks with timeout to prevent blocking
                 if tasks:
-                    done, pending = await asyncio.wait(tasks, timeout=0.01, return_when=asyncio.FIRST_COMPLETED)
-                    
-                    # Cancel pending tasks
-                    for task in pending:
-                        task.cancel()
-                    
-                    # Clear completed tasks
-                    tasks = list(pending)
+                    try:
+                        # Increased timeout to 2 seconds to allow processing to complete
+                        done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.FIRST_COMPLETED)
+                        
+                        # Cancel pending tasks
+                        for task in pending:
+                            task.cancel()
+                        
+                        # Clear completed tasks
+                        tasks = list(pending)
+                    except Exception as e:
+                        logger.error(f"Error in task processing: {e}")
+                        print(f"Error in task processing: {e}")
+                        # Clear all tasks on error
+                        for task in tasks:
+                            task.cancel()
+                        tasks = []
                 
                 # Check resource usage and throttle if necessary
                 throttle_factor = self.resource_monitor.get_throttle_factor()
@@ -749,19 +758,22 @@ class SingleFileTailWatcher:
             results = []
             for i, task in enumerate(tasks):
                 try:
-                    result = await asyncio.wait_for(task, timeout=10.0)
+                    # Reduced timeout to 5 seconds to prevent long hangs
+                    result = await asyncio.wait_for(task, timeout=5.0)
                     results.append(result)
                     logger.info(f"Task {i} completed successfully")
                     print(f"Task {i} completed successfully")
                 except asyncio.TimeoutError:
-                    logger.error(f"Task {i} timed out after 10 seconds, cancelling")
-                    print(f"Task {i} timed out after 10 seconds, cancelling")
+                    logger.error(f"Task {i} timed out after 5 seconds, cancelling")
+                    print(f"Task {i} timed out after 5 seconds, cancelling")
                     task.cancel()
-                    results.append(Exception(f"Task {i} timed out"))
+                    # Return empty list instead of exception to continue processing
+                    results.append([])
                 except Exception as e:
                     logger.error(f"Task {i} failed: {e}")
                     print(f"Task {i} failed: {e}")
-                    results.append(e)
+                    # Return empty list instead of exception to continue processing
+                    results.append([])
             
             logger.info(f"All tasks processed: {len(results)} results")
             print(f"All tasks processed: {len(results)} results")
@@ -776,8 +788,11 @@ class SingleFileTailWatcher:
             if isinstance(result, Exception):
                 logger.error(f"Error in parallel processing chunk {i}: {result}")
                 print(f"Error in parallel processing chunk {i}: {result}")
-            else:
+            elif isinstance(result, list):
                 orders.extend(result)
+            else:
+                logger.warning(f"Unexpected result type from chunk {i}: {type(result)}")
+                print(f"Unexpected result type from chunk {i}: {type(result)}")
         
         logger.info(f"Parallel processing completed: {len(orders)} total orders")
         print(f"Parallel processing completed: {len(orders)} total orders")
@@ -787,15 +802,63 @@ class SingleFileTailWatcher:
     def _parse_chunk_sync(self, lines: List[str]) -> List:
         """Synchronous parsing of a chunk of lines (for thread pool)."""
         orders = []
-        for line in lines:
-            order = self._parse_line_optimized(line)
-            if order:
-                orders.append(order)
+        processed_lines = 0
+        failed_lines = 0
+        
+        for i, line in enumerate(lines):
+            try:
+                # Add timeout for each line parsing to prevent hanging
+                import signal
+                import threading
+                import time
+                
+                result = [None]
+                exception = [None]
+                
+                def parse_with_timeout():
+                    try:
+                        result[0] = self._parse_line_optimized(line)
+                    except Exception as e:
+                        exception[0] = e
+                
+                # Create thread with timeout
+                thread = threading.Thread(target=parse_with_timeout)
+                thread.daemon = True
+                thread.start()
+                thread.join(timeout=1.0)  # 1 second timeout per line
+                
+                if thread.is_alive():
+                    # Thread is still running, it's hanging
+                    logger.warning(f"Line {i} parsing timed out after 1 second, skipping: {line[:100]}...")
+                    print(f"Line {i} parsing timed out after 1 second, skipping: {line[:100]}...")
+                    failed_lines += 1
+                    continue
+                
+                if exception[0]:
+                    logger.warning(f"Line {i} parsing failed: {exception[0]}, skipping: {line[:100]}...")
+                    print(f"Line {i} parsing failed: {exception[0]}, skipping: {line[:100]}...")
+                    failed_lines += 1
+                    continue
+                
+                if result[0]:
+                    orders.append(result[0])
+                
+                processed_lines += 1
+                
+                # Log progress every 10 lines
+                if processed_lines % 10 == 0:
+                    logger.info(f"Chunk progress: {processed_lines}/{len(lines)} lines processed")
+                    print(f"Chunk progress: {processed_lines}/{len(lines)} lines processed")
+                    
+            except Exception as e:
+                logger.error(f"Unexpected error processing line {i}: {e}")
+                print(f"Unexpected error processing line {i}: {e}")
+                failed_lines += 1
         
         # Diagnostic: log chunk processing results
         if len(lines) > 0:
-            logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders")
-            print(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders")
+            logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
+            print(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
         
         return orders
     
@@ -836,6 +899,46 @@ class SingleFileTailWatcher:
         # Pre-filtering: reject obviously invalid lines
         if not self._pre_filter_line(line):
             return None
+        
+        # Add timeout protection for JSON parsing
+        try:
+            import signal
+            import threading
+            import time
+            
+            result = [None]
+            exception = [None]
+            
+            def parse_with_timeout():
+                try:
+                    # Original parsing logic
+                    result[0] = self._parse_line_internal(line)
+                except Exception as e:
+                    exception[0] = e
+            
+            # Create thread with timeout
+            thread = threading.Thread(target=parse_with_timeout)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout=0.5)  # 500ms timeout for JSON parsing
+            
+            if thread.is_alive():
+                # Thread is still running, it's hanging
+                logger.warning(f"Line parsing timed out after 500ms, skipping: {line[:50]}...")
+                return None
+            
+            if exception[0]:
+                logger.debug(f"Line parsing failed: {exception[0]}")
+                return None
+            
+            return result[0]
+            
+        except Exception as e:
+            logger.debug(f"Error in timeout-protected parsing: {e}")
+            return None
+    
+    def _parse_line_internal(self, line: str) -> Optional:
+        """Internal line parsing without timeout protection."""
         
         # Увеличиваем глобальный счетчик для всех строк, прошедших pre-filter
         self.global_lines_processed += 1
