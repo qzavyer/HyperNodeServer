@@ -75,7 +75,7 @@ class TestHealthAPI:
         assert data["nodeStatus"] == "online"
         assert data["log_directory_accessible"] is True
         assert data["threshold_minutes"] == 5
-        assert "last_log_update" in data
+        assert "lastUpdate" in data
         assert "check_timestamp" in data
     
     @patch('src.main.node_health_monitor')
@@ -119,7 +119,7 @@ class TestHealthAPI:
         
         assert data["nodeStatus"] == "offline"
         assert data["log_directory_accessible"] is False
-        assert data["last_log_update"] is None
+        assert data["lastUpdate"] is None
     
     @patch('src.main.node_health_monitor')
     def test_node_health_status_monitor_not_initialized(self, mock_monitor):
@@ -169,19 +169,19 @@ class TestHealthAPI:
         
         # Check all required fields are present
         required_fields = [
-            "status", "last_log_update", "log_directory_accessible", 
+            "nodeStatus", "lastUpdate", "log_directory_accessible", 
             "threshold_minutes", "check_timestamp"
         ]
         for field in required_fields:
             assert field in data
         
         # Check field types
-        assert isinstance(data["status"], str)
+        assert isinstance(data["nodeStatus"], str)
         assert isinstance(data["log_directory_accessible"], bool)
         assert isinstance(data["threshold_minutes"], int)
         
         # Check timestamp format
-        assert data["last_log_update"] == test_time.isoformat()
+        assert data["lastUpdate"] == test_time.isoformat()
         assert data["check_timestamp"] == test_time.isoformat()
     
     @patch('src.main.node_health_monitor')
