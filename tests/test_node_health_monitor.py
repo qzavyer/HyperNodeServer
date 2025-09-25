@@ -16,14 +16,14 @@ class TestNodeHealthStatus:
         """Test creating NodeHealthStatus object."""
         now = datetime.now(timezone.utc)
         status = NodeHealthStatus(
-            status="healthy",
+            status="online",
             last_log_update=now,
             log_directory_accessible=True,
             threshold_minutes=5,
             check_timestamp=now
         )
         
-        assert status.status == "healthy"
+        assert status.status == "online"
         assert status.last_log_update == now
         assert status.log_directory_accessible is True
         assert status.threshold_minutes == 5
@@ -33,7 +33,7 @@ class TestNodeHealthStatus:
         """Test converting NodeHealthStatus to dictionary."""
         now = datetime.now(timezone.utc)
         status = NodeHealthStatus(
-            status="unhealthy",
+            status="degraded",
             last_log_update=now,
             log_directory_accessible=True,
             threshold_minutes=10,
@@ -42,8 +42,8 @@ class TestNodeHealthStatus:
         
         result = status.to_dict()
         
-        assert result["status"] == "unhealthy"
-        assert result["last_log_update"] == now.isoformat()
+        assert result["nodeStatus"] == "degraded"
+        assert result["lastUpdate"] == now.isoformat()
         assert result["log_directory_accessible"] is True
         assert result["threshold_minutes"] == 10
         assert result["check_timestamp"] == now.isoformat()
@@ -52,7 +52,7 @@ class TestNodeHealthStatus:
         """Test to_dict with None last_log_update."""
         now = datetime.now(timezone.utc)
         status = NodeHealthStatus(
-            status="server_unavailable",
+            status="offline",
             last_log_update=None,
             log_directory_accessible=False,
             threshold_minutes=5,
@@ -61,7 +61,7 @@ class TestNodeHealthStatus:
         
         result = status.to_dict()
         
-        assert result["last_log_update"] is None
+        assert result["lastUpdate"] is None
 
 
 class TestNodeHealthMonitor:
@@ -153,7 +153,7 @@ class TestNodeHealthMonitor:
         
         status = monitor.get_health_status()
         
-        assert status.status == "server_unavailable"
+        assert status.status == "offline"
         assert status.log_directory_accessible is False
         assert status.last_log_update is None
     
@@ -161,7 +161,7 @@ class TestNodeHealthMonitor:
         """Test get_health_status with no log files."""
         status = self.monitor.get_health_status()
         
-        assert status.status == "unhealthy"
+        assert status.status == "degraded"
         assert status.log_directory_accessible is True
         assert status.last_log_update is None
     
@@ -177,7 +177,7 @@ class TestNodeHealthMonitor:
         
         status = self.monitor.get_health_status()
         
-        assert status.status == "healthy"
+        assert status.status == "online"
         assert status.log_directory_accessible is True
         assert status.last_log_update is not None
     
@@ -193,7 +193,7 @@ class TestNodeHealthMonitor:
         
         status = self.monitor.get_health_status()
         
-        assert status.status == "unhealthy"
+        assert status.status == "degraded"
         assert status.log_directory_accessible is True
         assert status.last_log_update is not None
     
@@ -209,7 +209,7 @@ class TestNodeHealthMonitor:
         
         status = self.monitor.get_health_status()
         
-        assert status.status == "healthy"  # Should be healthy (< threshold)
+        assert status.status == "online"  # Should be healthy (< threshold)
     
     def test_get_health_status_subdirectories(self):
         """Test get_health_status with files in subdirectories."""
@@ -226,7 +226,7 @@ class TestNodeHealthMonitor:
         
         status = self.monitor.get_health_status()
         
-        assert status.status == "healthy"
+        assert status.status == "online"
         assert status.last_log_update is not None
     
     @patch('src.monitoring.node_health_monitor.logger')

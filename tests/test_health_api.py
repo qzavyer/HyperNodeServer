@@ -59,7 +59,7 @@ class TestHealthAPI:
         """Test successful node health status retrieval."""
         # Mock the health status
         mock_status = NodeHealthStatus(
-            status="healthy",
+            status="online",
             last_log_update=datetime.now(timezone.utc),
             log_directory_accessible=True,
             threshold_minutes=5,
@@ -72,7 +72,7 @@ class TestHealthAPI:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["status"] == "healthy"
+        assert data["nodeStatus"] == "online"
         assert data["log_directory_accessible"] is True
         assert data["threshold_minutes"] == 5
         assert "last_log_update" in data
@@ -83,7 +83,7 @@ class TestHealthAPI:
         """Test node health status when unhealthy."""
         # Mock unhealthy status
         mock_status = NodeHealthStatus(
-            status="unhealthy",
+            status="degraded",
             last_log_update=datetime.now(timezone.utc),
             log_directory_accessible=True,
             threshold_minutes=5,
@@ -96,7 +96,7 @@ class TestHealthAPI:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["status"] == "unhealthy"
+        assert data["nodeStatus"] == "degraded"
         assert data["log_directory_accessible"] is True
     
     @patch('src.main.node_health_monitor')
@@ -104,7 +104,7 @@ class TestHealthAPI:
         """Test node health status when server is unavailable."""
         # Mock server unavailable status
         mock_status = NodeHealthStatus(
-            status="server_unavailable",
+            status="offline",
             last_log_update=None,
             log_directory_accessible=False,
             threshold_minutes=5,
@@ -117,7 +117,7 @@ class TestHealthAPI:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["status"] == "server_unavailable"
+        assert data["nodeStatus"] == "offline"
         assert data["log_directory_accessible"] is False
         assert data["last_log_update"] is None
     
@@ -154,7 +154,7 @@ class TestHealthAPI:
         # Mock status with specific values
         test_time = datetime(2025, 1, 13, 20, 30, 0, tzinfo=timezone.utc)
         mock_status = NodeHealthStatus(
-            status="healthy",
+            status="online",
             last_log_update=test_time,
             log_directory_accessible=True,
             threshold_minutes=10,
@@ -208,7 +208,7 @@ class TestHealthAPI:
             
             assert response.status_code == 200
             data = response.json()
-            assert data["status"] == expected_status
+            assert data["nodeStatus"] == expected_status
             assert data["threshold_minutes"] == threshold
     
     def test_health_endpoint_metrics(self):

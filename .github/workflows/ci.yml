@@ -64,7 +64,7 @@ jobs:
         
     - name: Generate coverage report
       run: |
-        python -m pytest tests/ --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=40
+        python -m pytest tests/ --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=63
         
     - name: Upload test results
       uses: actions/upload-artifact@v4
