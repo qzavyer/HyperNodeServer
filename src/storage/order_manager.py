@@ -10,8 +10,6 @@ if TYPE_CHECKING:
     from src.storage.config_manager import ConfigManager
     from src.notifications.order_notifier import OrderNotifier
 
-logger = get_logger(__name__)
-
 class OrderManagerError(Exception):
     """Base exception for order manager errors."""
     pass
@@ -159,6 +157,14 @@ class OrderManager:
             for order in filtered_orders:
                 liquidity = order.price * order.size
                 self.logger.info(f"WS Order: {order.symbol} {order.side} @ {order.price} size={order.size} liquidity=${liquidity:,.2f} time={order.timestamp}")
+            
+            # Send WebSocket notifications for all filtered orders
+            if filtered_orders and self.order_notifier:
+                self.logger.info(f"Sending WebSocket notifications for {len(filtered_orders)} orders")
+                print(f"Sending WebSocket notifications for {len(filtered_orders)} orders")
+                await self.order_notifier.notify_orders_batch(filtered_orders, notification_type="both")
+                self.logger.info(f"WebSocket notifications sent for {len(filtered_orders)} orders")
+                print(f"WebSocket notifications sent for {len(filtered_orders)} orders")
             
             # Group by order id
             grouped: Dict[str, List[Order]] = {}
