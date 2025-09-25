@@ -30,6 +30,12 @@ class OrderManager:
         self.order_notifier = order_notifier
         self.orders: Dict[str, Order] = {}
         self.logger = get_logger(__name__)
+        
+        # Log order notifier initialization
+        if self.order_notifier:
+            self.logger.info("Order notifier set for WebSocket updates")
+        else:
+            self.logger.warning("Order notifier not provided - WebSocket notifications disabled")
     
     def set_order_notifier(self, order_notifier: 'OrderNotifier'):
         """Set order notifier for WebSocket updates."""

@@ -49,6 +49,36 @@ def sample_order():
 class TestOrderManager:
     """Tests for OrderManager class."""
     
+    def test_order_manager_initialization_with_notifier(self, mock_config_manager, mock_order_notifier):
+        """Test OrderManager initialization with order notifier."""
+        with patch('src.storage.order_manager.get_logger') as mock_logger:
+            mock_logger_instance = Mock()
+            mock_logger.return_value = mock_logger_instance
+            
+            manager = OrderManager(mock_config_manager, mock_order_notifier)
+            
+            # Check that order notifier is set
+            assert manager.order_notifier == mock_order_notifier
+            assert manager.config_manager == mock_config_manager
+            
+            # Check that initialization log was called
+            mock_logger_instance.info.assert_called_with("Order notifier set for WebSocket updates")
+    
+    def test_order_manager_initialization_without_notifier(self, mock_config_manager):
+        """Test OrderManager initialization without order notifier."""
+        with patch('src.storage.order_manager.get_logger') as mock_logger:
+            mock_logger_instance = Mock()
+            mock_logger.return_value = mock_logger_instance
+            
+            manager = OrderManager(mock_config_manager, None)
+            
+            # Check that order notifier is None
+            assert manager.order_notifier is None
+            assert manager.config_manager == mock_config_manager
+            
+            # Check that warning log was called
+            mock_logger_instance.warning.assert_called_with("Order notifier not provided - WebSocket notifications disabled")
+    
     def test_init(self, mock_config_manager, mock_order_notifier):
         """Test OrderManager initialization."""
         manager = OrderManager(mock_config_manager, mock_order_notifier)
