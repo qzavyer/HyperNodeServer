@@ -203,11 +203,6 @@ class OrderManager:
 
                 self.orders[order_id] = updated
 
-            # Send WebSocket notifications for updated orders if notifier is available
-            if updated_orders and self.order_notifier:
-                relevant_orders = [self.orders[order_id] for order_id in updated_orders]
-                await self.order_notifier.notify_orders_batch(relevant_orders, notification_type="both")
-
             # Schedule async save for the entire batch
 
         except Exception as e:
