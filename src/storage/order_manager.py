@@ -146,12 +146,10 @@ class OrderManager:
         """
         try:
             self.logger.info(f"OrderManager.update_orders_batch_async called with {len(orders)} orders")
-            print(f"OrderManager.update_orders_batch_async called with {len(orders)} orders")
             
             # Filter orders based on configuration
             filtered_orders = [order for order in orders if self._should_process_order(order)]
             self.logger.info(f"After filtering: {len(filtered_orders)} orders (filtered out: {len(orders) - len(filtered_orders)})")
-            print(f"After filtering: {len(filtered_orders)} orders (filtered out: {len(orders) - len(filtered_orders)})")
             
             # Log all orders that passed filtering and are sent to WebSocket
             for order in filtered_orders:
@@ -161,10 +159,8 @@ class OrderManager:
             # Send WebSocket notifications for all filtered orders
             if filtered_orders and self.order_notifier:
                 self.logger.info(f"Sending WebSocket notifications for {len(filtered_orders)} orders")
-                print(f"Sending WebSocket notifications for {len(filtered_orders)} orders")
                 await self.order_notifier.notify_orders_batch(filtered_orders, notification_type="both")
                 self.logger.info(f"WebSocket notifications sent for {len(filtered_orders)} orders")
-                print(f"WebSocket notifications sent for {len(filtered_orders)} orders")
             
             # Group by order id
             grouped: Dict[str, List[Order]] = {}
