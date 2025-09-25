@@ -696,7 +696,11 @@ class SingleFileTailWatcher:
 
             # Process all orders at once
             if orders:
+                logger.info(f"Calling order_manager.update_orders_batch_async with {len(orders)} orders")
+                print(f"Calling order_manager.update_orders_batch_async with {len(orders)} orders")
                 await self.order_manager.update_orders_batch_async(orders)
+                logger.info(f"order_manager.update_orders_batch_async completed for {len(orders)} orders")
+                print(f"order_manager.update_orders_batch_async completed for {len(orders)} orders")
                 self.total_orders_processed += len(orders)
                 
                 # Log every 1000 orders with timestamp of last order
