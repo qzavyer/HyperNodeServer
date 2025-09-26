@@ -370,7 +370,6 @@ class SingleFileTailWatcher:
                         tasks = list(pending)
                     except Exception as e:
                         logger.error(f"Error in task processing: {e}")
-                        print(f"Error in task processing: {e}")
                         # Clear all tasks on error
                         for task in tasks:
                             task.cancel()
@@ -512,7 +511,6 @@ class SingleFileTailWatcher:
                             # Log every 1000 lines added to buffer
                             if lines_read % 1000 == 0:
                                 logger.info(f"Added {lines_read} lines to buffer, buffer size: {len(self.line_buffer)}")
-                                print(f"Added {lines_read} lines to buffer, buffer size: {len(self.line_buffer)}")
                             
                             # Process batch when full or timeout reached
                             if (len(self.line_buffer) >= self.batch_size or 
@@ -683,7 +681,6 @@ class SingleFileTailWatcher:
             return
             
         logger.info(f"Processing batch of {len(self.line_buffer)} lines")
-        print(f"Processing batch of {len(self.line_buffer)} lines")
             
         try:
             # Use parallel processing for large batches
@@ -697,10 +694,8 @@ class SingleFileTailWatcher:
             # Process all orders at once
             if orders:
                 logger.info(f"Calling order_manager.update_orders_batch_async with {len(orders)} orders")
-                print(f"Calling order_manager.update_orders_batch_async with {len(orders)} orders")
                 await self.order_manager.update_orders_batch_async(orders)
                 logger.info(f"order_manager.update_orders_batch_async completed for {len(orders)} orders")
-                print(f"order_manager.update_orders_batch_async completed for {len(orders)} orders")
                 self.total_orders_processed += len(orders)
                 
                 # Log every 1000 orders with timestamp of last order
@@ -744,7 +739,6 @@ class SingleFileTailWatcher:
         chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
         
         logger.info(f"Parallel processing {len(lines)} lines in {len(chunks)} chunks")
-        print(f"Parallel processing {len(lines)} lines in {len(chunks)} chunks")
         
         # Process chunks in parallel
         loop = asyncio.get_event_loop()
@@ -756,7 +750,6 @@ class SingleFileTailWatcher:
         # Wait for all chunks to complete with individual timeouts
         try:
             logger.info(f"Starting asyncio.gather with {len(tasks)} tasks")
-            print(f"Starting asyncio.gather with {len(tasks)} tasks")
             
             # Wait for each task individually with timeout
             results = []
@@ -766,24 +759,19 @@ class SingleFileTailWatcher:
                     result = await asyncio.wait_for(task, timeout=5.0)
                     results.append(result)
                     logger.info(f"Task {i} completed successfully")
-                    print(f"Task {i} completed successfully")
                 except asyncio.TimeoutError:
                     logger.error(f"Task {i} timed out after 5 seconds, cancelling")
-                    print(f"Task {i} timed out after 5 seconds, cancelling")
                     task.cancel()
                     # Return empty list instead of exception to continue processing
                     results.append([])
                 except Exception as e:
                     logger.error(f"Task {i} failed: {e}")
-                    print(f"Task {i} failed: {e}")
                     # Return empty list instead of exception to continue processing
                     results.append([])
             
             logger.info(f"All tasks processed: {len(results)} results")
-            print(f"All tasks processed: {len(results)} results")
         except Exception as e:
             logger.error(f"Parallel batch processing failed: {e}")
-            print(f"Parallel batch processing failed: {e}")
             raise
         
         # Combine results
@@ -791,15 +779,12 @@ class SingleFileTailWatcher:
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 logger.error(f"Error in parallel processing chunk {i}: {result}")
-                print(f"Error in parallel processing chunk {i}: {result}")
             elif isinstance(result, list):
                 orders.extend(result)
             else:
                 logger.warning(f"Unexpected result type from chunk {i}: {type(result)}")
-                print(f"Unexpected result type from chunk {i}: {type(result)}")
         
         logger.info(f"Parallel processing completed: {len(orders)} total orders")
-        print(f"Parallel processing completed: {len(orders)} total orders")
         
         return orders
     
@@ -834,13 +819,11 @@ class SingleFileTailWatcher:
                 if thread.is_alive():
                     # Thread is still running, it's hanging
                     logger.warning(f"Line {i} parsing timed out after 1 second, skipping: {line[:100]}...")
-                    print(f"Line {i} parsing timed out after 1 second, skipping: {line[:100]}...")
                     failed_lines += 1
                     continue
                 
                 if exception[0]:
                     logger.warning(f"Line {i} parsing failed: {exception[0]}, skipping: {line[:100]}...")
-                    print(f"Line {i} parsing failed: {exception[0]}, skipping: {line[:100]}...")
                     failed_lines += 1
                     continue
                 
@@ -852,17 +835,14 @@ class SingleFileTailWatcher:
                 # Log progress every 10 lines
                 if processed_lines % 10 == 0:
                     logger.info(f"Chunk progress: {processed_lines}/{len(lines)} lines processed")
-                    print(f"Chunk progress: {processed_lines}/{len(lines)} lines processed")
                     
             except Exception as e:
                 logger.error(f"Unexpected error processing line {i}: {e}")
-                print(f"Unexpected error processing line {i}: {e}")
                 failed_lines += 1
         
         # Diagnostic: log chunk processing results
         if len(lines) > 0:
             logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
-            print(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
         
         return orders
     
@@ -887,7 +867,6 @@ class SingleFileTailWatcher:
         # Diagnostic: log every 100 rejected lines
         if self.pre_filter_rejected % 100 == 0:
             logger.info(f"Pre-filter rejected {self.pre_filter_rejected} lines, last: {line[:50]}...")
-            print(f"Pre-filter rejected {self.pre_filter_rejected} lines, last: {line[:50]}...")
         
         return False
     
@@ -950,21 +929,17 @@ class SingleFileTailWatcher:
         # Диагностика: логируем каждые 500 строк
         if self.global_lines_processed % 500 == 0:
             logger.info(f"Global lines processed: {self.global_lines_processed}")
-            print(f"Global lines processed: {self.global_lines_processed}")
         
         # Логируем статистику OrderExtractor каждые 1000 обработанных строк
         if self.global_lines_processed > 0 and self.global_lines_processed % 1000 == 0:
             logger.info(f"Triggering OrderExtractor stats logging at {self.global_lines_processed} lines")
-            print(f"Triggering OrderExtractor stats logging at {self.global_lines_processed} lines")
             if hasattr(self.parser, 'order_extractor'):
                 if hasattr(self.parser.order_extractor, '_log_detailed_stats'):
                     self.parser.order_extractor._log_detailed_stats()
                 else:
                     logger.error(f"OrderExtractor does not have _log_detailed_stats method. Available methods: {dir(self.parser.order_extractor)}")
-                    print(f"OrderExtractor does not have _log_detailed_stats method. Available methods: {dir(self.parser.order_extractor)}")
             else:
                 logger.error(f"Parser does not have order_extractor attribute. Available attributes: {dir(self.parser)}")
-                print(f"Parser does not have order_extractor attribute. Available attributes: {dir(self.parser)}")
         
         # Diagnostic: log every 1000 lines to see what we're processing
         if hasattr(self, '_parse_line_count'):
@@ -974,7 +949,6 @@ class SingleFileTailWatcher:
             
         if self._parse_line_count % 1000 == 0:
             logger.info(f"Parsing line {self._parse_line_count}: {line[:100]}...")
-            print(f"Parsing line {self._parse_line_count}: {line[:100]}...")
             
         try:
             # JSON optimization: cache parsed JSON for identical lines

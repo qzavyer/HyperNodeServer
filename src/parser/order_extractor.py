@@ -123,4 +123,3 @@ class OrderExtractor:
             stats_msg += f", unknown_statuses={self.unknown_status_count}"
         
         self.logger.info(stats_msg)
-        print(stats_msg)
