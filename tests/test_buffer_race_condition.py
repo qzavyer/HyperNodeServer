@@ -250,35 +250,64 @@ class TestParallelProcessingDeadlock:
         return watcher
     
     @pytest.mark.asyncio
-    async def test_chunks_do_not_exceed_workers(self, watcher):
-        """Test that number of chunks never exceeds parallel_workers.
+    async def test_chunks_exactly_equal_workers(self, watcher):
+        """Test that chunks are created EXACTLY equal to num_chunks (not more!).
         
         This prevents executor overflow where extra tasks queue up
-        and can cause deadlock with asyncio.wait_for().
+        and can cause deadlock.
         """
-        # Test with various line counts
+        # Test with various line counts that would create remainder
         test_cases = [
-            (100, 4),      # Small batch
-            (1000, 4),     # Medium batch
-            (10000, 4),    # Large batch
-            (50000, 4),    # Very large batch
+            (25433, 4, 4),   # 25433 % 4 = 1 remainder → should still be 4 chunks
+            (10000, 4, 4),   # 10000 % 4 = 0 remainder → 4 chunks
+            (5555, 4, 4),    # 5555 % 4 = 3 remainder → should still be 4 chunks
+            (1001, 4, 1),    # Only 1001 lines → 1 chunk (< 1000 per chunk threshold)
         ]
         
-        for line_count, expected_max_chunks in test_cases:
+        for line_count, workers, expected_chunks in test_cases:
+            watcher.parallel_workers = workers
             test_lines = [f'{{"user":"0x{i:03x}","oid":{i},"coin":"BTC","side":"A","px":"50000","sz":"1","timestamp":"2025-10-07T14:00:00.000000"}}' for i in range(line_count)]
             
-            # Mock _parse_chunk_sync to return empty
-            with patch.object(watcher, '_parse_chunk_sync', return_value=[]):
-                # Call parallel processing
-                await watcher._process_batch_parallel(test_lines)
+            # Track actual chunks created
+            actual_chunks_created = None
             
-            # Verify chunks calculation
-            # In the code: num_chunks = min(parallel_workers, max(1, len(lines) // 1000))
-            expected_chunks = min(watcher.parallel_workers, max(1, line_count // 1000))
+            def capture_chunks(chunk_lines):
+                # Just return empty, we only care about counting
+                return []
             
-            # We can't directly verify chunks, but we verified it doesn't hang
-            # If it completes, the fix is working
-            assert True, f"Processing {line_count} lines completed without deadlock"
+            original_run = watcher.executor.submit
+            submit_count = 0
+            
+            def counting_submit(fn, *args):
+                nonlocal submit_count
+                submit_count += 1
+                # Call original but return immediately
+                return original_run(lambda: [])
+            
+            with patch.object(watcher.executor, 'submit', side_effect=counting_submit):
+                with patch('asyncio.get_event_loop') as mock_loop:
+                    # Mock run_in_executor to count calls
+                    calls = []
+                    def mock_run_in_executor(executor, fn, chunk):
+                        calls.append(len(chunk))
+                        # Return completed future
+                        future = asyncio.Future()
+                        future.set_result([])
+                        return future
+                    
+                    mock_loop.return_value.run_in_executor = mock_run_in_executor
+                    
+                    await watcher._process_batch_parallel(test_lines)
+                    
+                    actual_chunks_created = len(calls)
+            
+            assert actual_chunks_created == expected_chunks, \
+                f"Expected {expected_chunks} chunks for {line_count} lines with {workers} workers, got {actual_chunks_created}"
+            
+            # Verify all lines are covered
+            total_lines_in_chunks = sum(calls)
+            assert total_lines_in_chunks == line_count, \
+                f"Expected {line_count} total lines, got {total_lines_in_chunks}"
     
     @pytest.mark.asyncio
     async def test_gather_handles_all_tasks(self, watcher):

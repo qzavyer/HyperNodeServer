@@ -364,14 +364,17 @@ class SingleFileTailWatcher:
                     tasks.append(find_task)
                 
                 # Wait for tasks with timeout to prevent blocking
+                # CRITICAL FIX: Increased timeout to 60s to allow parallel processing to complete
+                # Parallel processing can take 30s, so we need to wait longer
                 if tasks:
                     try:
-                        # Increased timeout to 2 seconds to allow processing to complete
-                        done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.FIRST_COMPLETED)
+                        done, pending = await asyncio.wait(tasks, timeout=60.0, return_when=asyncio.FIRST_COMPLETED)
                         
-                        # Cancel pending tasks
-                        for task in pending:
-                            task.cancel()
+                        # Only cancel if still pending after timeout
+                        if pending:
+                            logger.warning(f"⚠️ {len(pending)} tasks still pending after 60s timeout, cancelling")
+                            for task in pending:
+                                task.cancel()
                         
                         # Clear completed tasks
                         tasks = list(pending)
@@ -759,13 +762,23 @@ class SingleFileTailWatcher:
         """Process batch in parallel for large batches."""
         logger.info(f"🔄 Parallel processing START: {len(lines)} lines, {self.parallel_workers} workers")
         
-        # CRITICAL FIX: Ensure chunks count <= parallel_workers to prevent executor overflow
+        # CRITICAL FIX: Ensure chunks count = parallel_workers (not more!)
         # If we create more tasks than workers, extra tasks queue up and can deadlock
         num_chunks = min(self.parallel_workers, max(1, len(lines) // 1000))  # At least 1000 lines per chunk
-        chunk_size = max(1, len(lines) // num_chunks)
-        chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
         
-        # Actual chunks might be slightly more due to division remainder
+        # Create EXACTLY num_chunks (not more!)
+        chunk_size = len(lines) // num_chunks
+        remainder = len(lines) % num_chunks
+        
+        chunks = []
+        start_idx = 0
+        for i in range(num_chunks):
+            # Distribute remainder evenly across first chunks
+            current_chunk_size = chunk_size + (1 if i < remainder else 0)
+            end_idx = start_idx + current_chunk_size
+            chunks.append(lines[start_idx:end_idx])
+            start_idx = end_idx
+        
         actual_chunks = len(chunks)
         logger.info(f"📊 Chunks created: {actual_chunks} chunks, ~{chunk_size} lines per chunk (workers: {self.parallel_workers})")
         
