@@ -768,11 +768,13 @@ class SingleFileTailWatcher:
         # Process chunks in parallel
         loop = asyncio.get_event_loop()
         tasks = []
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
+            logger.info(f"🔧 Creating task {i+1}/{len(chunks)} for {len(chunk)} lines...")
             task = loop.run_in_executor(self.executor, self._parse_chunk_sync, chunk)
             tasks.append(task)
+            logger.info(f"✅ Task {i+1}/{len(chunks)} created successfully")
         
-        logger.info(f"🚀 Starting parallel execution: {len(tasks)} tasks")
+        logger.info(f"🚀 Starting parallel execution: {len(tasks)} tasks (executor: {self.executor._max_workers} max workers)")
         
         # Wait for all chunks to complete with individual timeouts
         try:
