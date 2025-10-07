@@ -327,6 +327,52 @@ class TestParallelProcessingDeadlock:
         # All workers should have been called
         assert call_count > 0, "Workers should have been called"
         assert isinstance(result, list), "Should return list of orders"
+    
+    @pytest.mark.asyncio
+    async def test_large_batch_limited_to_max_size(self, watcher):
+        """Test that batches larger than 100K lines are split.
+        
+        This prevents timeout on huge batches.
+        """
+        # Create buffer with 150K lines
+        huge_buffer = [f'{{"user":"0x{i:03x}","oid":{i},"coin":"BTC","side":"A","px":"50000","sz":"1","timestamp":"2025-10-07T14:00:00.000000"}}' for i in range(150000)]
+        
+        for line in huge_buffer:
+            watcher.line_buffer.append(line)
+        
+        initial_size = len(watcher.line_buffer)
+        assert initial_size == 150000
+        
+        # Mock processing to avoid actual work
+        with patch.object(watcher, '_process_batch_parallel', return_value=[]):
+            with patch.object(watcher, '_process_batch_sequential', return_value=[]):
+                await watcher._process_batch()
+        
+        # Should have processed 100K and left 50K in buffer
+        assert len(watcher.line_buffer) == 50000, \
+            f"Should have 50K lines remaining in buffer, got {len(watcher.line_buffer)}"
+    
+    @pytest.mark.asyncio  
+    async def test_executor_recreated_after_timeout(self, watcher):
+        """Test that executor is recreated after timeout to clear stuck threads."""
+        test_lines = [f'{{"user":"0x{i:03x}","oid":{i},"coin":"BTC","side":"A","px":"50000","sz":"1","timestamp":"2025-10-07T14:00:00.000000"}}' for i in range(5000)]
+        
+        original_executor = watcher.executor
+        
+        # Mock gather to raise TimeoutError
+        async def mock_gather(*args, **kwargs):
+            raise asyncio.TimeoutError()
+        
+        with patch('asyncio.gather', side_effect=mock_gather):
+            with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError):
+                result = await watcher._process_batch_parallel(test_lines)
+        
+        # Executor should be different instance
+        assert watcher.executor is not original_executor, \
+            "Executor should be recreated after timeout"
+        
+        # Should return empty results after timeout
+        assert result == [], "Should return empty list after timeout"
 
 
 class TestBufferMemoryLeak:

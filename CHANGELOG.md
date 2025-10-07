@@ -33,10 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Critical**: Logging automatically recovers after disk space is freed
 - **Critical**: Memory leak from buffer race condition - buffer no longer grows from 41M to 44M+ lines
 - **Critical**: Deadlock in parallel processing - asyncio.gather() properly waits for ThreadPoolExecutor tasks
-- **Critical**: Executor overflow - chunks limited to available workers preventing task queue buildup
+- **Critical**: Executor overflow - exact chunk count matching worker count preventing task queue buildup
+- **Critical**: Task cancellation - increased _tail_loop timeout from 2s to 60s allowing gather() to complete
+- **Critical**: Stuck threads - executor recreated after timeout to clear zombie threads
+- **Critical**: Large batch timeout - batches limited to 100K lines preventing 120s timeout
+- **Critical**: Per-line timeout removed - was causing thread hangs and 2x slowdown
 - Buffer clearing happens immediately after snapshot, not at end of processing
 - Parallel processing completes successfully without hanging on task completion
 - WebSocket broadcasting now works correctly when orders are parsed
+- Chunks created using explicit loop with remainder distribution (not list comprehension)
+- ThreadPoolExecutor futures properly handled with asyncio.gather() instead of wait_for()
 
 ## [1.0.0] - Previous Release
 

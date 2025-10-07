@@ -696,7 +696,18 @@ class SingleFileTailWatcher:
         buffer_size = len(lines_to_process)
         self.line_buffer.clear()  # Clear IMMEDIATELY, not at the end!
         
-        logger.info(f"📦 Processing batch snapshot: {buffer_size} lines (buffer cleared)")
+        # CRITICAL FIX 2: Limit batch size to prevent timeout
+        # If buffer is huge (>100K lines), only process first 100K
+        MAX_BATCH_SIZE = 100000
+        if buffer_size > MAX_BATCH_SIZE:
+            logger.warning(f"⚠️ Large buffer detected: {buffer_size} lines, limiting to {MAX_BATCH_SIZE}")
+            # Put remaining lines back to buffer for next batch
+            self.line_buffer.extend(lines_to_process[MAX_BATCH_SIZE:])
+            lines_to_process = lines_to_process[:MAX_BATCH_SIZE]
+            buffer_size = len(lines_to_process)
+            logger.info(f"📦 Processing limited batch: {buffer_size} lines, {len(self.line_buffer)} lines queued for next")
+        else:
+            logger.info(f"📦 Processing batch snapshot: {buffer_size} lines (buffer cleared)")
             
         try:
             # Use parallel processing for large batches
@@ -798,18 +809,30 @@ class SingleFileTailWatcher:
             logger.info(f"⏳ Waiting for all {len(tasks)} tasks to complete...")
             
             # Use gather with timeout for entire batch
+            # CRITICAL: 120s timeout for large batches (can be 500K+ lines)
             results = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True),
-                timeout=30.0  # 30 seconds for entire batch
+                timeout=120.0  # 120 seconds for entire batch
             )
             
             logger.info(f"✅ All parallel tasks completed: {len(results)} results received")
             
         except asyncio.TimeoutError:
-            logger.error(f"⏰ Parallel batch timed out after 30 seconds")
+            logger.error(f"⏰ Parallel batch timed out after 120 seconds")
+            logger.error(f"🔄 Recreating executor to clear stuck threads...")
+            
             # Cancel all tasks
             for task in tasks:
                 task.cancel()
+            
+            # CRITICAL FIX 4: Recreate executor to clear stuck threads
+            try:
+                self.executor.shutdown(wait=False, cancel_futures=True)
+                self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.parallel_workers)
+                logger.info(f"✅ Executor recreated with {self.parallel_workers} workers")
+            except Exception as e:
+                logger.error(f"Failed to recreate executor: {e}")
+            
             # Return empty results
             results = [[] for _ in tasks]
         except Exception as e:
@@ -850,39 +873,12 @@ class SingleFileTailWatcher:
         
         for i, line in enumerate(lines):
             try:
-                # Add timeout for each line parsing to prevent hanging
-                import signal
-                import threading
-                import time
+                # CRITICAL FIX 3: Removed per-line timeout - it causes threads to hang
+                # Instead, rely on overall batch timeout (120s)
+                order = self._parse_line_optimized(line)
                 
-                result = [None]
-                exception = [None]
-                
-                def parse_with_timeout():
-                    try:
-                        result[0] = self._parse_line_optimized(line)
-                    except Exception as e:
-                        exception[0] = e
-                
-                # Create thread with timeout
-                thread = threading.Thread(target=parse_with_timeout)
-                thread.daemon = True
-                thread.start()
-                thread.join(timeout=1.0)  # 1 second timeout per line
-                
-                if thread.is_alive():
-                    # Thread is still running, it's hanging
-                    logger.warning(f"Line {i} parsing timed out after 1 second, skipping: {line[:100]}...")
-                    failed_lines += 1
-                    continue
-                
-                if exception[0]:
-                    logger.warning(f"Line {i} parsing failed: {exception[0]}, skipping: {line[:100]}...")
-                    failed_lines += 1
-                    continue
-                
-                if result[0]:
-                    orders.append(result[0])
+                if order:
+                    orders.append(order)
                 
                 processed_lines += 1
                 
