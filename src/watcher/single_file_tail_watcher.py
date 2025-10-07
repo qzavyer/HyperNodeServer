@@ -508,7 +508,7 @@ class SingleFileTailWatcher:
                     new_lines = new_text.split('\n')
                     logger.info(f"Decoded {len(new_data)} bytes to {len(new_lines)} lines")
                     
-                    # Process each line
+                    # Add all lines to buffer first, then process
                     for line_idx, line in enumerate(new_lines):
                         line = line.strip()
                         if line:
@@ -518,19 +518,14 @@ class SingleFileTailWatcher:
                             # Log every 1000 lines added to buffer
                             if lines_read % 1000 == 0:
                                 logger.info(f"Added {lines_read} lines to buffer, buffer size: {len(self.line_buffer)}")
-                            
-                            # Process batch when full or timeout reached
-                            if (len(self.line_buffer) >= self.batch_size or 
-                                self._should_process_batch()):
-                                await self._process_batch()
+                    
+                    # Process batch AFTER adding all lines
+                    if self.line_buffer:
+                        await self._process_batch()
 
             except Exception as e:
                 logger.error(f"Error reading new data: {e}")
                 return
-        
-        # Process remaining lines in buffer
-        if self.line_buffer and self._should_process_batch():
-            await self._process_batch()
     
     async def _read_memory_mapped_lines(self) -> None:
         """Revolutionary memory-mapped line reading."""
