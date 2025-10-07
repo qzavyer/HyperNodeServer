@@ -50,8 +50,15 @@ class SingleFileEventHandler(FileSystemEventHandler):
 class SingleFileTailWatcher:
     """Real-time single file tail watcher using readline approach."""
     
-    def __init__(self, order_manager: OrderManager):
+    def __init__(self, order_manager: OrderManager, websocket_manager=None):
+        """Initialize SingleFileTailWatcher.
+        
+        Args:
+            order_manager: OrderManager instance
+            websocket_manager: WebSocketManager for broadcasting orders
+        """
         self.order_manager = order_manager
+        self.websocket_manager = websocket_manager
         self.logs_path = Path(settings.NODE_LOGS_PATH).expanduser()
         self.parser = LogParser(chunk_size=settings.CHUNK_SIZE_BYTES, batch_size=settings.BATCH_SIZE)
         self.is_running = False
@@ -844,7 +851,33 @@ class SingleFileTailWatcher:
         if len(lines) > 0:
             logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
         
+        # Send orders to WebSocket if available
+        if orders and self.websocket_manager:
+            try:
+                asyncio.create_task(self._send_orders_to_websocket(orders))
+            except Exception as e:
+                logger.error(f"Failed to send orders to WebSocket: {e}")
+        
         return orders
+    
+    async def _send_orders_to_websocket(self, orders: List) -> None:
+        """Send parsed orders to WebSocket subscribers.
+        
+        Args:
+            orders: List of parsed orders
+        """
+        try:
+            if not self.websocket_manager:
+                logger.warning("WebSocket manager not available")
+                return
+            
+            # Send each order via WebSocket
+            for order in orders:
+                await self.websocket_manager.broadcast_order_update(order)
+            
+            logger.info(f"Sent {len(orders)} orders to WebSocket subscribers")
+        except Exception as e:
+            logger.error(f"Error sending orders to WebSocket: {e}")
     
     @lru_cache(maxsize=1000)
     def _pre_filter_line(self, line: str) -> bool:
