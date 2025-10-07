@@ -746,20 +746,24 @@ class SingleFileTailWatcher:
     
     async def _process_batch_sequential(self, lines: List[str]) -> List:
         """Process batch sequentially for small batches."""
+        logger.info(f"🔄 Sequential processing: {len(lines)} lines")
         orders = []
         for line in lines:
             order = self._parse_line_optimized(line)
             if order:
                 orders.append(order)
+        logger.info(f"✅ Sequential completed: {len(lines)} lines → {len(orders)} orders")
         return orders
     
     async def _process_batch_parallel(self, lines: List[str]) -> List:
         """Process batch in parallel for large batches."""
+        logger.info(f"🔄 Parallel processing START: {len(lines)} lines, {self.parallel_workers} workers")
+        
         # Split lines into chunks for parallel processing
         chunk_size = max(1, len(lines) // self.parallel_workers)
         chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
         
-        logger.debug(f"Parallel processing {len(lines)} lines in {len(chunks)} chunks")
+        logger.info(f"📊 Chunks created: {len(chunks)} chunks, {chunk_size} lines per chunk")
         
         # Process chunks in parallel
         loop = asyncio.get_event_loop()
@@ -768,32 +772,38 @@ class SingleFileTailWatcher:
             task = loop.run_in_executor(self.executor, self._parse_chunk_sync, chunk)
             tasks.append(task)
         
+        logger.info(f"🚀 Starting parallel execution: {len(tasks)} tasks")
+        
         # Wait for all chunks to complete with individual timeouts
         try:
-            logger.debug(f"Starting asyncio.gather with {len(tasks)} tasks")
             
             # Wait for each task individually with timeout
             results = []
             for i, task in enumerate(tasks):
+                logger.info(f"⏳ Waiting for task {i+1}/{len(tasks)}...")
                 try:
                     # Reduced timeout to 5 seconds to prevent long hangs
                     result = await asyncio.wait_for(task, timeout=5.0)
                     results.append(result)
-                    logger.debug(f"Task {i} completed successfully")
+                    logger.info(f"✅ Task {i+1}/{len(tasks)} completed successfully")
                 except asyncio.TimeoutError:
-                    logger.error(f"Task {i} timed out after 5 seconds, cancelling")
+                    logger.error(f"⏰ Task {i+1}/{len(tasks)} timed out after 5 seconds, cancelling")
                     task.cancel()
                     # Return empty list instead of exception to continue processing
                     results.append([])
                 except Exception as e:
-                    logger.error(f"Task {i} failed: {e}")
+                    logger.error(f"❌ Task {i+1}/{len(tasks)} failed: {e}")
                     # Return empty list instead of exception to continue processing
                     results.append([])
             
-            logger.debug(f"All tasks processed: {len(results)} results")
+            logger.info(f"✅ All parallel tasks completed: {len(results)} results received")
         except Exception as e:
-            logger.error(f"Parallel batch processing failed: {e}")
+            logger.error(f"❌ Parallel batch processing FAILED: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
+        
+        logger.info(f"📦 Combining results from {len(results)} chunks...")
         
         # Combine results
         orders = []
@@ -805,12 +815,13 @@ class SingleFileTailWatcher:
             else:
                 logger.warning(f"Unexpected result type from chunk {i}: {type(result)}")
         
-        logger.info(f"✅ Parallel batch: {len(lines)} lines → {len(orders)} orders ({len(chunks)} workers)")
+        logger.info(f"✅ Parallel COMPLETED: {len(lines)} lines → {len(orders)} orders ({len(chunks)} workers)")
         
         return orders
     
     def _parse_chunk_sync(self, lines: List[str]) -> List:
         """Synchronous parsing of a chunk of lines (for thread pool)."""
+        logger.info(f"🔧 Worker START: processing {len(lines)} lines in thread pool")
         orders = []
         processed_lines = 0
         failed_lines = 0
@@ -861,9 +872,8 @@ class SingleFileTailWatcher:
                 logger.error(f"Unexpected error processing line {i}: {e}")
                 failed_lines += 1
         
-        # Diagnostic: log chunk processing results (only for debugging large chunks)
-        if len(lines) > 500:
-            logger.debug(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
+        # Log results
+        logger.info(f"✅ Worker COMPLETED: {len(lines)} lines → {len(orders)} orders (failed: {failed_lines})")
         
         # Return orders (will be sent to WebSocket from async context)
         return orders
