@@ -696,20 +696,14 @@ class SingleFileTailWatcher:
             else:
                 orders = await self._process_batch_sequential(self.line_buffer)
             
-            logger.info(f"Processed batch of {len(orders)} orders")
-
             # Send orders to WebSocket
-            logger.debug(f"WebSocket check: orders={len(orders) if orders else 0}, websocket_manager={self.websocket_manager is not None}")
             if orders and self.websocket_manager:
                 try:
-                    logger.info(f"Sending {len(orders)} orders to WebSocket...")
                     await self._send_orders_to_websocket(orders)
                 except Exception as e:
                     logger.error(f"Failed to send orders to WebSocket: {e}")
-            elif not orders:
-                logger.debug("No orders to send to WebSocket")
-            elif not self.websocket_manager:
-                logger.warning("WebSocket manager not set, cannot broadcast orders")
+            elif orders and not self.websocket_manager:
+                logger.warning(f"⚠️ WebSocket manager not set, {len(orders)} orders not broadcasted")
 
             # Process all orders at once
             if orders:
@@ -758,7 +752,7 @@ class SingleFileTailWatcher:
         chunk_size = max(1, len(lines) // self.parallel_workers)
         chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
         
-        logger.info(f"Parallel processing {len(lines)} lines in {len(chunks)} chunks")
+        logger.debug(f"Parallel processing {len(lines)} lines in {len(chunks)} chunks")
         
         # Process chunks in parallel
         loop = asyncio.get_event_loop()
@@ -769,7 +763,7 @@ class SingleFileTailWatcher:
         
         # Wait for all chunks to complete with individual timeouts
         try:
-            logger.info(f"Starting asyncio.gather with {len(tasks)} tasks")
+            logger.debug(f"Starting asyncio.gather with {len(tasks)} tasks")
             
             # Wait for each task individually with timeout
             results = []
@@ -778,7 +772,7 @@ class SingleFileTailWatcher:
                     # Reduced timeout to 5 seconds to prevent long hangs
                     result = await asyncio.wait_for(task, timeout=5.0)
                     results.append(result)
-                    logger.info(f"Task {i} completed successfully")
+                    logger.debug(f"Task {i} completed successfully")
                 except asyncio.TimeoutError:
                     logger.error(f"Task {i} timed out after 5 seconds, cancelling")
                     task.cancel()
@@ -789,7 +783,7 @@ class SingleFileTailWatcher:
                     # Return empty list instead of exception to continue processing
                     results.append([])
             
-            logger.info(f"All tasks processed: {len(results)} results")
+            logger.debug(f"All tasks processed: {len(results)} results")
         except Exception as e:
             logger.error(f"Parallel batch processing failed: {e}")
             raise
@@ -804,7 +798,7 @@ class SingleFileTailWatcher:
             else:
                 logger.warning(f"Unexpected result type from chunk {i}: {type(result)}")
         
-        logger.info(f"Parallel processing completed: {len(orders)} total orders")
+        logger.info(f"✅ Parallel batch: {len(lines)} lines → {len(orders)} orders ({len(chunks)} workers)")
         
         return orders
     
@@ -852,17 +846,17 @@ class SingleFileTailWatcher:
                 
                 processed_lines += 1
                 
-                # Log progress every 10 lines
-                if processed_lines % 10 == 0:
-                    logger.info(f"Chunk progress: {processed_lines}/{len(lines)} lines processed")
+                # Log progress only for large chunks (every 100 lines) to reduce log spam
+                if processed_lines % 100 == 0 and len(lines) > 500:
+                    logger.debug(f"Chunk progress: {processed_lines}/{len(lines)} lines processed")
                     
             except Exception as e:
                 logger.error(f"Unexpected error processing line {i}: {e}")
                 failed_lines += 1
         
-        # Diagnostic: log chunk processing results
-        if len(lines) > 0:
-            logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
+        # Diagnostic: log chunk processing results (only for debugging large chunks)
+        if len(lines) > 500:
+            logger.debug(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
         
         # Return orders (will be sent to WebSocket from async context)
         return orders
@@ -879,8 +873,10 @@ class SingleFileTailWatcher:
                 return
             
             # Check if there are active connections
-            active_connections = len(self.websocket_manager.active_connections) if hasattr(self.websocket_manager, 'active_connections') else 0
-            logger.info(f"Broadcasting {len(orders)} orders to {active_connections} WebSocket clients")
+            if hasattr(self.websocket_manager, 'active_connections'):
+                total_clients = sum(len(clients) for clients in self.websocket_manager.active_connections.values())
+            else:
+                total_clients = 0
             
             # Send each order via WebSocket
             sent_count = 0
@@ -891,7 +887,7 @@ class SingleFileTailWatcher:
                 except Exception as order_error:
                     logger.error(f"Failed to broadcast single order: {order_error}")
             
-            logger.info(f"✅ Successfully sent {sent_count}/{len(orders)} orders to WebSocket subscribers")
+            logger.info(f"📡 WebSocket: {sent_count}/{len(orders)} orders → {total_clients} clients")
         except Exception as e:
             logger.error(f"Error sending orders to WebSocket: {e}")
             import traceback
