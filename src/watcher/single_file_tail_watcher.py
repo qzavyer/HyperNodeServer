@@ -759,46 +759,46 @@ class SingleFileTailWatcher:
         """Process batch in parallel for large batches."""
         logger.info(f"🔄 Parallel processing START: {len(lines)} lines, {self.parallel_workers} workers")
         
-        # Split lines into chunks for parallel processing
-        chunk_size = max(1, len(lines) // self.parallel_workers)
+        # CRITICAL FIX: Ensure chunks count <= parallel_workers to prevent executor overflow
+        # If we create more tasks than workers, extra tasks queue up and can deadlock
+        num_chunks = min(self.parallel_workers, max(1, len(lines) // 1000))  # At least 1000 lines per chunk
+        chunk_size = max(1, len(lines) // num_chunks)
         chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
         
-        logger.info(f"📊 Chunks created: {len(chunks)} chunks, {chunk_size} lines per chunk")
+        # Actual chunks might be slightly more due to division remainder
+        actual_chunks = len(chunks)
+        logger.info(f"📊 Chunks created: {actual_chunks} chunks, ~{chunk_size} lines per chunk (workers: {self.parallel_workers})")
         
         # Process chunks in parallel
         loop = asyncio.get_event_loop()
         tasks = []
         for i, chunk in enumerate(chunks):
-            logger.info(f"🔧 Creating task {i+1}/{len(chunks)} for {len(chunk)} lines...")
             task = loop.run_in_executor(self.executor, self._parse_chunk_sync, chunk)
             tasks.append(task)
-            logger.info(f"✅ Task {i+1}/{len(chunks)} created successfully")
         
-        logger.info(f"🚀 Starting parallel execution: {len(tasks)} tasks (executor: {self.executor._max_workers} max workers)")
+        logger.info(f"🚀 Starting parallel execution: {len(tasks)} tasks")
         
-        # Wait for all chunks to complete with individual timeouts
+        # Wait for all chunks to complete
+        # CRITICAL FIX: Use asyncio.gather() instead of individual wait_for()
+        # gather() properly handles ThreadPoolExecutor futures
         try:
+            logger.info(f"⏳ Waiting for all {len(tasks)} tasks to complete...")
             
-            # Wait for each task individually with timeout
-            results = []
-            for i, task in enumerate(tasks):
-                logger.info(f"⏳ Waiting for task {i+1}/{len(tasks)}...")
-                try:
-                    # Reduced timeout to 5 seconds to prevent long hangs
-                    result = await asyncio.wait_for(task, timeout=5.0)
-                    results.append(result)
-                    logger.info(f"✅ Task {i+1}/{len(tasks)} completed successfully")
-                except asyncio.TimeoutError:
-                    logger.error(f"⏰ Task {i+1}/{len(tasks)} timed out after 5 seconds, cancelling")
-                    task.cancel()
-                    # Return empty list instead of exception to continue processing
-                    results.append([])
-                except Exception as e:
-                    logger.error(f"❌ Task {i+1}/{len(tasks)} failed: {e}")
-                    # Return empty list instead of exception to continue processing
-                    results.append([])
+            # Use gather with timeout for entire batch
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=30.0  # 30 seconds for entire batch
+            )
             
             logger.info(f"✅ All parallel tasks completed: {len(results)} results received")
+            
+        except asyncio.TimeoutError:
+            logger.error(f"⏰ Parallel batch timed out after 30 seconds")
+            # Cancel all tasks
+            for task in tasks:
+                task.cancel()
+            # Return empty results
+            results = [[] for _ in tasks]
         except Exception as e:
             logger.error(f"❌ Parallel batch processing FAILED: {e}")
             import traceback
@@ -807,17 +807,24 @@ class SingleFileTailWatcher:
         
         logger.info(f"📦 Combining results from {len(results)} chunks...")
         
-        # Combine results
+        # Combine results from all chunks
         orders = []
+        failed_chunks = 0
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error(f"Error in parallel processing chunk {i}: {result}")
+                logger.error(f"❌ Chunk {i+1}/{len(results)} returned exception: {result}")
+                failed_chunks += 1
             elif isinstance(result, list):
                 orders.extend(result)
+                logger.debug(f"✅ Chunk {i+1}/{len(results)}: {len(result)} orders")
             else:
-                logger.warning(f"Unexpected result type from chunk {i}: {type(result)}")
+                logger.warning(f"⚠️ Chunk {i+1}/{len(results)} unexpected type: {type(result)}")
+                failed_chunks += 1
         
-        logger.info(f"✅ Parallel COMPLETED: {len(lines)} lines → {len(orders)} orders ({len(chunks)} workers)")
+        if failed_chunks > 0:
+            logger.warning(f"⚠️ {failed_chunks}/{len(results)} chunks failed")
+        
+        logger.info(f"✅ Parallel COMPLETED: {len(lines)} lines → {len(orders)} orders ({actual_chunks} chunks, {failed_chunks} failed)")
         
         return orders
     

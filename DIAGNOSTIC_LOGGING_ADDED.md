@@ -29,13 +29,9 @@
 🚀 Starting parallel execution: N tasks
 ```
 
-**Ожидание каждой задачи:**
+**Ожидание всех задач одновременно:**
 ```
-⏳ Waiting for task 1/5...
-✅ Task 1/5 completed successfully
-⏳ Waiting for task 2/5...
-✅ Task 2/5 completed successfully
-...
+⏳ Waiting for all 4 tasks to complete...
 ```
 
 **Завершение всех задач:**
@@ -84,25 +80,25 @@ Traceback: <traceback>
 ### Полный поток для успешной обработки:
 
 ```
-📦 Processing batch snapshot: 16656 lines (buffer cleared)
-🔄 Parallel processing START: 16656 lines, 16 workers
-📊 Chunks created: 16 chunks, 1041 lines per chunk
-🚀 Starting parallel execution: 16 tasks
-⏳ Waiting for task 1/16...
-🔧 Worker START: processing 1041 lines in thread pool
-✅ Worker COMPLETED: 1041 lines → 812 orders (failed: 0)
-✅ Task 1/16 completed successfully
-⏳ Waiting for task 2/16...
-🔧 Worker START: processing 1041 lines in thread pool
-✅ Worker COMPLETED: 1041 lines → 798 orders (failed: 0)
-✅ Task 2/16 completed successfully
-...
-✅ All parallel tasks completed: 16 results received
-📦 Combining results from 16 chunks...
-✅ Parallel COMPLETED: 16656 lines → 12945 orders (16 workers)
-📡 WebSocket: 12945/12945 orders → 2 clients
-Calling order_manager.update_orders_batch_async with 12945 orders
-order_manager.update_orders_batch_async completed for 12945 orders
+📦 Processing batch snapshot: 25352 lines (buffer cleared)
+🔄 Parallel processing START: 25352 lines, 4 workers
+📊 Chunks created: 4 chunks, ~6338 lines per chunk (workers: 4)
+🚀 Starting parallel execution: 4 tasks (executor: 4 max workers)
+⏳ Waiting for all 4 tasks to complete...
+🔧 Worker START: processing 6338 lines in thread pool
+🔧 Worker START: processing 6338 lines in thread pool
+🔧 Worker START: processing 6338 lines in thread pool
+🔧 Worker START: processing 6338 lines in thread pool
+✅ Worker COMPLETED: 6338 lines → 4952 orders (failed: 0)
+✅ Worker COMPLETED: 6338 lines → 4938 orders (failed: 0)
+✅ Worker COMPLETED: 6338 lines → 4944 orders (failed: 0)
+✅ Worker COMPLETED: 6338 lines → 4956 orders (failed: 0)
+✅ All parallel tasks completed: 4 results received
+📦 Combining results from 4 chunks...
+✅ Parallel COMPLETED: 25352 lines → 19790 orders (4 chunks, 0 failed)
+📡 WebSocket: 19790/19790 orders → 2 clients
+Calling order_manager.update_orders_batch_async with 19790 orders
+order_manager.update_orders_batch_async completed for 19790 orders
 ```
 
 ### Диагностика проблем
@@ -116,24 +112,29 @@ order_manager.update_orders_batch_async completed for 12945 orders
 - Возможно memory allocation issue
 
 **Если НЕТ "Starting parallel execution":**
-- Проблема в создании tasks (строки 769-773)
+- Проблема в создании tasks (строки 773-777)
 - Возможно executor не работает
 
 **Если НЕТ "Worker START":**
 - Tasks не запускаются в thread pool
-- Проблема с executor
+- Executor переполнен или shutdown
 
 **Если НЕТ "Worker COMPLETED":**
 - Worker зависает в parsing
-- Timeout срабатывает (видим `⏰ Task N/M timed out`)
+- Проблема в _parse_chunk_sync()
 
-**Если НЕТ "All parallel tasks completed":**
-- Проблема в цикле ожидания tasks
-- Exception в asyncio.wait_for
+**Если НЕТ "All parallel tasks completed" (ПОСЛЕ "Worker COMPLETED"):**
+- ❌ **DEADLOCK!** asyncio.gather() зависает
+- Проверить timeout (должен быть 30 сек)
+- Проверить что chunks <= workers
 
 **Если НЕТ "Parallel COMPLETED":**
 - Проблема в комбинировании results
-- Exception после tasks
+- Exception после gather()
+
+**Если НЕТ "WebSocket":**
+- orders = [] (все отфильтрованы)
+- websocket_manager не установлен
 
 ## Мониторинг команды
 
