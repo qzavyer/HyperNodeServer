@@ -699,11 +699,17 @@ class SingleFileTailWatcher:
             logger.info(f"Processed batch of {len(orders)} orders")
 
             # Send orders to WebSocket
+            logger.debug(f"WebSocket check: orders={len(orders) if orders else 0}, websocket_manager={self.websocket_manager is not None}")
             if orders and self.websocket_manager:
                 try:
+                    logger.info(f"Sending {len(orders)} orders to WebSocket...")
                     await self._send_orders_to_websocket(orders)
                 except Exception as e:
                     logger.error(f"Failed to send orders to WebSocket: {e}")
+            elif not orders:
+                logger.debug("No orders to send to WebSocket")
+            elif not self.websocket_manager:
+                logger.warning("WebSocket manager not set, cannot broadcast orders")
 
             # Process all orders at once
             if orders:
@@ -872,13 +878,24 @@ class SingleFileTailWatcher:
                 logger.warning("WebSocket manager not available")
                 return
             
-            # Send each order via WebSocket
-            for order in orders:
-                await self.websocket_manager.broadcast_order_update(order)
+            # Check if there are active connections
+            active_connections = len(self.websocket_manager.active_connections) if hasattr(self.websocket_manager, 'active_connections') else 0
+            logger.info(f"Broadcasting {len(orders)} orders to {active_connections} WebSocket clients")
             
-            logger.info(f"Sent {len(orders)} orders to WebSocket subscribers")
+            # Send each order via WebSocket
+            sent_count = 0
+            for order in orders:
+                try:
+                    await self.websocket_manager.broadcast_order_update(order)
+                    sent_count += 1
+                except Exception as order_error:
+                    logger.error(f"Failed to broadcast single order: {order_error}")
+            
+            logger.info(f"✅ Successfully sent {sent_count}/{len(orders)} orders to WebSocket subscribers")
         except Exception as e:
             logger.error(f"Error sending orders to WebSocket: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
     
     @lru_cache(maxsize=1000)
     def _pre_filter_line(self, line: str) -> bool:
