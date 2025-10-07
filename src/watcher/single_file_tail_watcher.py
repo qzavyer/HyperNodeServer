@@ -678,18 +678,29 @@ class SingleFileTailWatcher:
         return (current_time - self.last_batch_time) >= self.batch_timeout_ms
     
     async def _process_batch(self) -> None:
-        """Process a batch of lines for maximum performance with parallel processing."""
+        """Process a batch of lines for maximum performance with parallel processing.
+        
+        CRITICAL FIX: Makes a copy of buffer and clears immediately to prevent race condition
+        where multiple _read_new_lines() calls add to the same buffer during processing.
+        """
         if not self.line_buffer:
             return
-            
-        logger.info(f"Processing batch of {len(self.line_buffer)} lines")
+        
+        # CRITICAL: Make a snapshot of current buffer and clear immediately
+        # This prevents race condition where _read_new_lines() adds more lines
+        # while we're processing the current batch
+        lines_to_process = list(self.line_buffer)  # Create copy
+        buffer_size = len(lines_to_process)
+        self.line_buffer.clear()  # Clear IMMEDIATELY, not at the end!
+        
+        logger.info(f"📦 Processing batch snapshot: {buffer_size} lines (buffer cleared)")
             
         try:
             # Use parallel processing for large batches
-            if len(self.line_buffer) >= self.parallel_batch_size:
-                orders = await self._process_batch_parallel(self.line_buffer)
+            if buffer_size >= self.parallel_batch_size:
+                orders = await self._process_batch_parallel(lines_to_process)
             else:
-                orders = await self._process_batch_sequential(self.line_buffer)
+                orders = await self._process_batch_sequential(lines_to_process)
             
             # Send orders to WebSocket
             if orders and self.websocket_manager:
@@ -714,8 +725,8 @@ class SingleFileTailWatcher:
                     logger.info(f"Processed {self.total_orders_processed} orders total, last order timestamp: {timestamp_str}")
                     self.last_orders_log = self.total_orders_processed
             
-            # Update counters
-            self.total_lines_processed += len(self.line_buffer)
+            # Update counters (use buffer_size instead of len(self.line_buffer))
+            self.total_lines_processed += buffer_size
             
             # Log performance every 1000 lines
             if self.total_lines_processed - self.last_performance_log >= 1000:
@@ -724,13 +735,14 @@ class SingleFileTailWatcher:
                 logger.info(f"Performance: {self.total_lines_processed} lines, {self.total_orders_processed} orders processed, cache hit rate: {cache_hit_rate:.1f}%, pre-filter pass rate: {pre_filter_rate:.1f}%")
                 self.last_performance_log = self.total_lines_processed
             
-            # Clear buffer and update timestamp
-            self.line_buffer.clear()
+            # Update timestamp
             self.last_batch_time = time.time() * 1000
+            
+            logger.debug(f"✅ Batch processing completed: {buffer_size} lines → {len(orders) if orders else 0} orders")
             
         except Exception as e:
             logger.error(f"Error processing batch: {e}")
-            self.line_buffer.clear()  # Clear buffer on error
+            # Buffer already cleared at the beginning, no need to clear again
     
     async def _process_batch_sequential(self, lines: List[str]) -> List:
         """Process batch sequentially for small batches."""
