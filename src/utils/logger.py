@@ -8,6 +8,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
+from src.utils.resilient_file_handler import ResilientRotatingFileHandler
+
 # Global logger cache
 _loggers = {}
 
@@ -55,12 +57,14 @@ def setup_logger(
     log_filepath = logs_dir / log_filename
     
     try:
-        # Create rotating file handler
-        file_handler = logging.handlers.RotatingFileHandler(
+        # Create resilient rotating file handler with automatic recovery
+        file_handler = ResilientRotatingFileHandler(
             log_filepath,
             maxBytes=max_size_mb * 1024 * 1024,  # Convert MB to bytes
             backupCount=5,  # Keep 5 backup files
-            encoding='utf-8'
+            encoding='utf-8',
+            emergency_cleanup_threshold_mb=50,  # Free 50 MB when disk is full
+            recovery_check_interval_sec=60  # Check for recovery every 60 seconds
         )
         file_handler.setLevel(getattr(logging, log_level.upper()))
         file_handler.setFormatter(formatter)
@@ -69,7 +73,7 @@ def setup_logger(
         logger.addHandler(file_handler)
         
         # Log successful file handler setup
-        print(f"✅ Logging to file: {log_filepath}")
+        print(f"✅ Logging to file: {log_filepath} (with automatic recovery)")
         
         # Also add console handler for Docker logs visibility
         console_handler = logging.StreamHandler(sys.stdout)
