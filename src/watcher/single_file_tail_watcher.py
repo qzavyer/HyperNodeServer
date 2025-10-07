@@ -698,6 +698,13 @@ class SingleFileTailWatcher:
             
             logger.info(f"Processed batch of {len(orders)} orders")
 
+            # Send orders to WebSocket
+            if orders and self.websocket_manager:
+                try:
+                    await self._send_orders_to_websocket(orders)
+                except Exception as e:
+                    logger.error(f"Failed to send orders to WebSocket: {e}")
+
             # Process all orders at once
             if orders:
                 logger.info(f"Calling order_manager.update_orders_batch_async with {len(orders)} orders")
@@ -851,13 +858,7 @@ class SingleFileTailWatcher:
         if len(lines) > 0:
             logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
         
-        # Send orders to WebSocket if available
-        if orders and self.websocket_manager:
-            try:
-                asyncio.create_task(self._send_orders_to_websocket(orders))
-            except Exception as e:
-                logger.error(f"Failed to send orders to WebSocket: {e}")
-        
+        # Return orders (will be sent to WebSocket from async context)
         return orders
     
     async def _send_orders_to_websocket(self, orders: List) -> None:

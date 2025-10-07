@@ -46,19 +46,20 @@ def __init__(self, order_manager: OrderManager, websocket_manager=None):
 
 ### 2. Added WebSocket Broadcasting
 
-After chunk processing:
+After batch processing (in async context):
 ```python
-# Diagnostic: log chunk processing results
-if len(lines) > 0:
-    logger.info(f"Chunk processed: {len(lines)} lines -> {len(orders)} orders (failed: {failed_lines})")
+# In _process_batch() method
+logger.info(f"Processed batch of {len(orders)} orders")
 
-# Send orders to WebSocket if available
+# Send orders to WebSocket
 if orders and self.websocket_manager:
     try:
-        asyncio.create_task(self._send_orders_to_websocket(orders))
+        await self._send_orders_to_websocket(orders)
     except Exception as e:
         logger.error(f"Failed to send orders to WebSocket: {e}")
 ```
+
+**Important:** WebSocket broadcasting is done from async context (`_process_batch`), NOT from sync context (`_parse_chunk_sync` which runs in thread pool executor).
 
 ### 3. New Method for Broadcasting
 
