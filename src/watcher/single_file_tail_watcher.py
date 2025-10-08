@@ -875,19 +875,20 @@ class SingleFileTailWatcher:
             try:
                 # CRITICAL FIX 3: Removed per-line timeout - it causes threads to hang
                 # Instead, rely on overall batch timeout (120s)
+                
+                # Diagnostic: Log every 1000 lines within worker
+                if processed_lines > 0 and processed_lines % 1000 == 0:
+                    logger.info(f"🔧 Worker progress: {processed_lines}/{len(lines)} lines, {len(orders)} orders so far")
+                
                 order = self._parse_line_optimized(line)
                 
                 if order:
                     orders.append(order)
                 
                 processed_lines += 1
-                
-                # Log progress only for large chunks (every 100 lines) to reduce log spam
-                if processed_lines % 100 == 0 and len(lines) > 500:
-                    logger.debug(f"Chunk progress: {processed_lines}/{len(lines)} lines processed")
                     
             except Exception as e:
-                logger.error(f"Unexpected error processing line {i}: {e}")
+                logger.error(f"❌ Worker error at line {i}: {e}")
                 failed_lines += 1
         
         # Log results
@@ -957,7 +958,11 @@ class SingleFileTailWatcher:
         return not self.resource_monitor.should_throttle()
     
     def _parse_line_optimized(self, line: str) -> Optional:
-        """Optimized line parsing with JSON caching and pre-filtering."""
+        """Optimized line parsing with JSON caching and pre-filtering.
+        
+        CRITICAL FIX: Removed threading timeout - it causes thread hangs and massive slowdown.
+        Rely on batch-level timeout (120s) instead of per-line timeout.
+        """
         if not line.strip():
             return None
         
@@ -965,41 +970,11 @@ class SingleFileTailWatcher:
         if not self._pre_filter_line(line):
             return None
         
-        # Add timeout protection for JSON parsing
+        # Direct parsing without timeout wrapper
         try:
-            import signal
-            import threading
-            import time
-            
-            result = [None]
-            exception = [None]
-            
-            def parse_with_timeout():
-                try:
-                    # Original parsing logic
-                    result[0] = self._parse_line_internal(line)
-                except Exception as e:
-                    exception[0] = e
-            
-            # Create thread with timeout
-            thread = threading.Thread(target=parse_with_timeout)
-            thread.daemon = True
-            thread.start()
-            thread.join(timeout=0.5)  # 500ms timeout for JSON parsing
-            
-            if thread.is_alive():
-                # Thread is still running, it's hanging
-                logger.warning(f"Line parsing timed out after 500ms, skipping: {line[:50]}...")
-                return None
-            
-            if exception[0]:
-                logger.debug(f"Line parsing failed: {exception[0]}")
-                return None
-            
-            return result[0]
-            
+            return self._parse_line_internal(line)
         except Exception as e:
-            logger.debug(f"Error in timeout-protected parsing: {e}")
+            logger.debug(f"Line parsing failed: {e}")
             return None
     
     def _parse_line_internal(self, line: str) -> Optional:
@@ -1033,6 +1008,10 @@ class SingleFileTailWatcher:
             logger.info(f"Parsing line {self._parse_line_count}: {line[:100]}...")
             
         try:
+            # Diagnostic: Log every 5000 lines to track progress
+            if self._parse_line_count % 5000 == 0:
+                logger.info(f"📊 Parse progress: {self._parse_line_count} lines processed")
+            
             # JSON optimization: cache parsed JSON for identical lines
             if self.json_optimization:
                 line_hash = hash(line)
@@ -1046,6 +1025,7 @@ class SingleFileTailWatcher:
                     self.cache_misses += 1
             
             # Parse the line
+            # Diagnostic: This is where most time is spent
             order = self.parser.parse_line(line)
             
             # Cache the result if JSON optimization is enabled
@@ -1069,7 +1049,7 @@ class SingleFileTailWatcher:
             return order
             
         except Exception as e:
-            logger.debug(f"Error parsing line: {e}")
+            logger.error(f"❌ Error parsing line {self._parse_line_count}: {e}, line: {line[:100]}...")
             return None
     
     async def _process_line(self, line: str) -> None:
