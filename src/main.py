@@ -131,10 +131,15 @@ async def startup_event():
     try:
         # Initialize config manager
         await config_manager.load_config_async()
-        logger.info("✅ Configuration loaded successfully")
+        config = config_manager.get_config()
+        logger.info(f"✅ Configuration loaded successfully with {len(config.symbols_config)} symbols")
+        if config.symbols_config:
+            symbol_names = [s.symbol for s in config.symbols_config]
+            logger.info(f"📊 Configured symbols: {symbol_names}")
+        else:
+            logger.warning("⚠️  No symbols configured - all orders will be filtered out!")
         
         # Initialize node health monitor
-        config = config_manager.get_config()
         global node_health_monitor
         node_health_monitor = NodeHealthMonitor(
             node_logs_path=config.node_logs_path,

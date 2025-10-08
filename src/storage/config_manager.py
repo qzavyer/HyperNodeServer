@@ -144,7 +144,12 @@ class ConfigManager:
             # Save updated configuration
             await self.save_config_async(updated_config)
             
-            logger.info(f"Updated symbols configuration with {len(symbols)} symbols")
+            # Log each symbol for debugging
+            symbol_names = [s.symbol for s in symbols]
+            logger.info(f"Updated symbols configuration with {len(symbols)} symbols: {symbol_names}")
+            for symbol in symbols:
+                logger.debug(f"Symbol config: {symbol.symbol} - min_liquidity={symbol.min_liquidity:.2f}, price_deviation={symbol.price_deviation}")
+            
             return updated_config
             
         except Exception as e:

@@ -29,6 +29,10 @@ class OrderManager:
         self.orders: Dict[str, Order] = {}
         self.logger = get_logger(__name__)
         
+        # Statistics
+        self.filtered_orders_count = 0
+        self.processed_orders_count = 0
+        
         # Log order notifier initialization
         if self.order_notifier:
             self.logger.info("Order notifier set for WebSocket updates")
@@ -67,15 +71,20 @@ class OrderManager:
             # Find symbol configuration
             symbol_config = next((sc for sc in config.symbols_config if sc.symbol == order.symbol), None)
             if symbol_config is None:
-                # self.logger.debug(f"Order {order.id} skipped: symbol {order.symbol} not in supported symbols")
+                self.filtered_orders_count += 1
+                if self.filtered_orders_count % 100 == 0:  # Log every 100 filtered orders
+                    self.logger.info(f"Filtered {self.filtered_orders_count} orders total")
+                self.logger.debug(f"Order {order.id} filtered: symbol '{order.symbol}' not in supported symbols (total: {len(config.symbols_config)})")
                 return False
             
             # Check minimum liquidity requirement
             order_liquidity = order.price * order.size
             if order_liquidity < symbol_config.min_liquidity:
-                # self.logger.debug(f"Order {order.id} skipped: liquidity {order_liquidity} < min_liquidity {symbol_config.min_liquidity} for {order.symbol}")
+                self.filtered_orders_count += 1
+                self.logger.debug(f"Order {order.id} filtered: liquidity {order_liquidity:.2f} < min {symbol_config.min_liquidity:.2f} for {order.symbol}")
                 return False
             
+            self.processed_orders_count += 1
             return True
             
         except Exception as e:
@@ -149,7 +158,8 @@ class OrderManager:
             
             # Filter orders based on configuration
             filtered_orders = [order for order in orders if self._should_process_order(order)]
-            self.logger.info(f"After filtering: {len(filtered_orders)} orders (filtered out: {len(orders) - len(filtered_orders)})")
+            filtered_count = len(orders) - len(filtered_orders)
+            self.logger.info(f"After filtering: {len(filtered_orders)} orders passed, {filtered_count} filtered (total filtered: {self.filtered_orders_count}, processed: {self.processed_orders_count})")
             
             # Log all orders that passed filtering and are sent to WebSocket
             for order in filtered_orders:
