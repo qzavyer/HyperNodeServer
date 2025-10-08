@@ -82,11 +82,13 @@ class SingleFileTailWatcher:
         
         # Parallel processing settings - conservative for HyperLiquid node coexistence
         if settings.MAX_WORKERS_AUTO:
-            # Use only 1/4 of available CPU cores to leave resources for HyperLiquid node
+            # CRITICAL FIX: Increase workers for LOW LATENCY - stay current with file growth
+            # Use half of available cores (increased from 1/4) for faster processing
             available_cores = os.cpu_count() or 4
-            self.parallel_workers = max(1, min(settings.TAIL_PARALLEL_WORKERS, available_cores // 4))
+            self.parallel_workers = max(4, min(16, available_cores // 2))  # Min 4, max 16
+            logger.info(f"⚡ LOW LATENCY mode: {self.parallel_workers} workers (cores: {available_cores})")
         else:
-            self.parallel_workers = settings.TAIL_PARALLEL_WORKERS
+            self.parallel_workers = max(4, min(16, settings.TAIL_PARALLEL_WORKERS))  # At least 4, max 16
         self.parallel_batch_size = settings.TAIL_PARALLEL_BATCH_SIZE
         self.json_optimization = settings.TAIL_JSON_OPTIMIZATION
         self.pre_filter = settings.TAIL_PRE_FILTER
@@ -513,14 +515,10 @@ class SingleFileTailWatcher:
                     
                     # Add all lines to buffer first, then process
                     for line_idx, line in enumerate(new_lines):
-                        line = line.strip()
-                        if line:
-                            self.line_buffer.append(line)
-                            lines_read += 1
-                            
-                            # Log every 1000 lines added to buffer
-                            if lines_read % 1000 == 0:
-                                logger.info(f"Added {lines_read} lines to buffer, buffer size: {len(self.line_buffer)}")
+                            line = line.strip()
+                            if line:
+                                self.line_buffer.append(line)
+                                lines_read += 1
                     
                     # Process batch AFTER adding all lines
                     if self.line_buffer:
@@ -696,18 +694,32 @@ class SingleFileTailWatcher:
         buffer_size = len(lines_to_process)
         self.line_buffer.clear()  # Clear IMMEDIATELY, not at the end!
         
-        # CRITICAL FIX 2: Limit batch size to prevent timeout
-        # If buffer is huge (>100K lines), only process first 100K
-        MAX_BATCH_SIZE = 100000
-        if buffer_size > MAX_BATCH_SIZE:
-            logger.warning(f"⚠️ Large buffer detected: {buffer_size} lines, limiting to {MAX_BATCH_SIZE}")
-            # Put remaining lines back to buffer for next batch
+        # CRITICAL FIX: Aggressive buffer management for LOW LATENCY
+        # Priority: Stay current with file growth, not process all historical data
+        MAX_BATCH_SIZE = 200000  # Increased from 100K
+        CRITICAL_BUFFER_SIZE = 500000  # If buffer exceeds this, drop old data
+        
+        if buffer_size > CRITICAL_BUFFER_SIZE:
+            # AGGRESSIVE: Drop old data, keep only recent lines
+            dropped_count = buffer_size - MAX_BATCH_SIZE
+            logger.error(f"🚨 CRITICAL buffer overflow: {buffer_size} lines! Dropping old data to stay current")
+            logger.error(f"⚠️ Dropping {dropped_count:,} old lines to prevent lag")
+            
+            # Keep only last MAX_BATCH_SIZE lines (most recent)
+            lines_to_process = lines_to_process[-MAX_BATCH_SIZE:]
+            buffer_size = len(lines_to_process)
+            
+            logger.error(f"📦 Processing RECENT batch: {buffer_size:,} lines (dropped {dropped_count:,} old)")
+            
+        elif buffer_size > MAX_BATCH_SIZE:
+            # Normal case: process MAX_BATCH_SIZE, queue remainder
+            logger.warning(f"⚠️ Large buffer: {buffer_size} lines, limiting to {MAX_BATCH_SIZE}")
             self.line_buffer.extend(lines_to_process[MAX_BATCH_SIZE:])
             lines_to_process = lines_to_process[:MAX_BATCH_SIZE]
             buffer_size = len(lines_to_process)
-            logger.info(f"📦 Processing limited batch: {buffer_size} lines, {len(self.line_buffer)} lines queued for next")
+            logger.info(f"📦 Processing batch: {buffer_size} lines, {len(self.line_buffer)} queued")
         else:
-            logger.info(f"📦 Processing batch snapshot: {buffer_size} lines (buffer cleared)")
+            logger.info(f"📦 Processing batch: {buffer_size} lines")
             
         try:
             # Use parallel processing for large batches
@@ -774,8 +786,9 @@ class SingleFileTailWatcher:
         logger.info(f"🔄 Parallel processing START: {len(lines)} lines, {self.parallel_workers} workers")
         
         # CRITICAL FIX: Ensure chunks count = parallel_workers (not more!)
-        # If we create more tasks than workers, extra tasks queue up and can deadlock
-        num_chunks = min(self.parallel_workers, max(1, len(lines) // 1000))  # At least 1000 lines per chunk
+        # LOW LATENCY: Use all available workers for maximum throughput
+        # At least 500 lines per chunk (reduced from 1000 for better parallelism)
+        num_chunks = min(self.parallel_workers, max(1, len(lines) // 500))
         
         # Create EXACTLY num_chunks (not more!)
         chunk_size = len(lines) // num_chunks
@@ -983,34 +996,17 @@ class SingleFileTailWatcher:
         # Увеличиваем глобальный счетчик для всех строк, прошедших pre-filter
         self.global_lines_processed += 1
         
-        # Диагностика: логируем каждые 500 строк
-        if self.global_lines_processed % 500 == 0:
+        # Диагностика: логируем каждые 10000 строк (reduced spam)
+        if self.global_lines_processed % 10000 == 0:
             logger.info(f"Global lines processed: {self.global_lines_processed}")
         
-        # Логируем статистику OrderExtractor каждые 1000 обработанных строк
-        if self.global_lines_processed > 0 and self.global_lines_processed % 1000 == 0:
-            logger.info(f"Triggering OrderExtractor stats logging at {self.global_lines_processed} lines")
+        # Логируем статистику OrderExtractor каждые 50000 строк (reduced spam)
+        if self.global_lines_processed > 0 and self.global_lines_processed % 50000 == 0:
             if hasattr(self.parser, 'order_extractor'):
                 if hasattr(self.parser.order_extractor, '_log_detailed_stats'):
                     self.parser.order_extractor._log_detailed_stats()
-                else:
-                    logger.error(f"OrderExtractor does not have _log_detailed_stats method. Available methods: {dir(self.parser.order_extractor)}")
-            else:
-                logger.error(f"Parser does not have order_extractor attribute. Available attributes: {dir(self.parser)}")
         
-        # Diagnostic: log every 1000 lines to see what we're processing
-        if hasattr(self, '_parse_line_count'):
-            self._parse_line_count += 1
-        else:
-            self._parse_line_count = 1
-            
-        if self._parse_line_count % 1000 == 0:
-            logger.info(f"Parsing line {self._parse_line_count}: {line[:100]}...")
-            
         try:
-            # Diagnostic: Log every 5000 lines to track progress
-            if self._parse_line_count % 5000 == 0:
-                logger.info(f"📊 Parse progress: {self._parse_line_count} lines processed")
             
             # JSON optimization: cache parsed JSON for identical lines
             if self.json_optimization:

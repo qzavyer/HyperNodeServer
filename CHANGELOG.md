@@ -36,13 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Critical**: Executor overflow - exact chunk count matching worker count preventing task queue buildup
 - **Critical**: Task cancellation - increased _tail_loop timeout from 2s to 60s allowing gather() to complete
 - **Critical**: Stuck threads - executor recreated after timeout to clear zombie threads
-- **Critical**: Large batch timeout - batches limited to 100K lines preventing 120s timeout
+- **Critical**: Infinite lag - aggressive buffer limit drops old data when buffer exceeds 500K lines
+- **Critical**: Low throughput - increased workers from 4 to 8-16 based on CPU cores
 - **Critical**: Per-line timeout removed - was causing thread hangs and 2x slowdown
 - Buffer clearing happens immediately after snapshot, not at end of processing
+- Batch size increased from 100K to 200K lines for higher throughput
 - Parallel processing completes successfully without hanging on task completion
 - WebSocket broadcasting now works correctly when orders are parsed
 - Chunks created using explicit loop with remainder distribution (not list comprehension)
 - ThreadPoolExecutor futures properly handled with asyncio.gather() instead of wait_for()
+- Log spam reduced (removed "Added X lines", reduced frequency of global stats)
 
 ## [1.0.0] - Previous Release
 
