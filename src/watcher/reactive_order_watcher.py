@@ -574,23 +574,28 @@ class ReactiveOrderWatcher:
             await self.stop_tracking_order(order_id)
     
     async def _send_order_to_websocket(self, order: 'Order') -> None:
-        """Отправить ордер в WebSocket.
+        """Отправить ордер в WebSocket с фильтрацией.
         
         Args:
             order: Ордер для отправки
         """
         try:
+            # Проверяем фильтр конфигурации
+            if not self._should_process_order(order):
+                logger.debug(f"Order {order.id} filtered out by configuration, not sending to WebSocket")
+                return
+            
             if self.websocket_manager:
                 # Отправляем ордер в WebSocket
                 await self.websocket_manager.broadcast_order_update(order)
-                logger.info(f"Sent order {order.id} to WebSocket subscribers")
+                logger.info(f"Sent order {order.id} ({order.symbol}) to WebSocket subscribers")
             else:
                 logger.warning("WebSocket manager not available")
         except Exception as e:
             logger.error(f"Error sending order to WebSocket: {e}")
     
     async def _send_orders_to_websocket(self, orders: List['Order']) -> None:
-        """Отправить список ордеров в WebSocket.
+        """Отправить список ордеров в WebSocket с фильтрацией.
         
         Args:
             orders: Список ордеров для отправки
@@ -599,12 +604,19 @@ class ReactiveOrderWatcher:
             return
         
         try:
+            # Фильтруем ордера по конфигурации перед отправкой
+            filtered_orders = [order for order in orders if self._should_process_order(order)]
+            
+            if not filtered_orders:
+                logger.info(f"All {len(orders)} orders filtered out by configuration")
+                return
+            
             if self.websocket_manager:
-                # Отправляем каждый ордер в WebSocket через orderUpdate канал
-                for order in orders:
+                # Отправляем каждый отфильтрованный ордер в WebSocket через orderUpdate канал
+                for order in filtered_orders:
                     await self.websocket_manager.broadcast_order_update(order)
                 
-                logger.info(f"Sent {len(orders)} orders to WebSocket subscribers")
+                logger.info(f"Sent {len(filtered_orders)}/{len(orders)} orders to WebSocket subscribers (filtered: {len(orders) - len(filtered_orders)})")
             else:
                 logger.warning("WebSocket manager not available for sending orders")
         except Exception as e:

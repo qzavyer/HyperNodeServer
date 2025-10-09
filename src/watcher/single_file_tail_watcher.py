@@ -728,16 +728,8 @@ class SingleFileTailWatcher:
             else:
                 orders = await self._process_batch_sequential(lines_to_process)
             
-            # Send orders to WebSocket
-            if orders and self.websocket_manager:
-                try:
-                    await self._send_orders_to_websocket(orders)
-                except Exception as e:
-                    logger.error(f"Failed to send orders to WebSocket: {e}")
-            elif orders and not self.websocket_manager:
-                logger.warning(f"⚠️ WebSocket manager not set, {len(orders)} orders not broadcasted")
-
             # Process all orders at once
+            # OrderManager will filter orders and send filtered ones to WebSocket via OrderNotifier
             if orders:
                 logger.info(f"Calling order_manager.update_orders_batch_async with {len(orders)} orders")
                 await self.order_manager.update_orders_batch_async(orders)
@@ -910,37 +902,6 @@ class SingleFileTailWatcher:
         # Return orders (will be sent to WebSocket from async context)
         return orders
     
-    async def _send_orders_to_websocket(self, orders: List) -> None:
-        """Send parsed orders to WebSocket subscribers.
-        
-        Args:
-            orders: List of parsed orders
-        """
-        try:
-            if not self.websocket_manager:
-                logger.warning("WebSocket manager not available")
-                return
-            
-            # Check if there are active connections
-            if hasattr(self.websocket_manager, 'active_connections'):
-                total_clients = sum(len(clients) for clients in self.websocket_manager.active_connections.values())
-            else:
-                total_clients = 0
-            
-            # Send each order via WebSocket
-            sent_count = 0
-            for order in orders:
-                try:
-                    await self.websocket_manager.broadcast_order_update(order)
-                    sent_count += 1
-                except Exception as order_error:
-                    logger.error(f"Failed to broadcast single order: {order_error}")
-            
-            logger.info(f"📡 WebSocket: {sent_count}/{len(orders)} orders → {total_clients} clients")
-        except Exception as e:
-            logger.error(f"Error sending orders to WebSocket: {e}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
     
     @lru_cache(maxsize=1000)
     def _pre_filter_line(self, line: str) -> bool:
