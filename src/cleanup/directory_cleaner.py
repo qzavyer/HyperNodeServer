@@ -27,6 +27,8 @@ class DirectoryCleaner:
             single_file_watcher: Ссылка на SingleFileTailWatcher для защиты текущего файла
         """
         self.base_dir = Path(base_dir).expanduser().resolve()
+        # Директория с числовыми файлами для очистки
+        self.target_cleanup_path = self.base_dir / "node_order_statuses" / "hourly"
         self.logger = setup_logger(__name__)
         self.single_file_watcher = single_file_watcher
         
@@ -44,30 +46,33 @@ class DirectoryCleaner:
             Tuple[int, int]: (количество удаленных директорий, количество удаленных файлов)
         """
         try:
-            self.logger.info(f"🧹 Начинаем очистку директории: {self.base_dir}")
+            self.logger.info(f"🧹 Starting cleanup in: {self.target_cleanup_path}")
             
-            if not self.base_dir.exists():
-                self.logger.warning(f"Директория не существует: {self.base_dir}")
+            if not self.target_cleanup_path.exists():
+                self.logger.warning(f"Target cleanup path does not exist: {self.target_cleanup_path}")
                 return 0, 0
             
             removed_dirs = 0
             removed_files = 0
             
-            # Рекурсивно ищем все директории с датами
-            date_directories = await self._find_date_directories_async()
+            # Находим все директории с датами в target_cleanup_path
+            date_directories = []
+            for item in self.target_cleanup_path.iterdir():
+                if item.is_dir() and self.date_pattern.match(item.name):
+                    date_directories.append(item)
             
             if not date_directories:
                 self.logger.info("No date directories found")
                 return 0, 0
             
-            # Сортируем по имени (это и есть сортировка по дате в формате yyyyMMdd)
+            # Сортируем по имени (формат yyyyMMdd)
             date_directories.sort(key=lambda p: p.name, reverse=True)
             
-            self.logger.info(f"Found {len(date_directories)} date directories")
+            self.logger.info(f"Found {len(date_directories)} date directories in {self.target_cleanup_path}")
             
-            # Оставляем только последнюю директорию (самую новую)
+            # Оставляем последнюю директорию
             latest_directory = date_directories[0]
-            directories_to_remove = date_directories[1:]  # Все кроме первой
+            directories_to_remove = date_directories[1:]
             
             self.logger.info(f"Keeping latest directory: {latest_directory.name}")
             
@@ -77,7 +82,7 @@ class DirectoryCleaner:
                 await self._remove_directory_async(dir_path)
                 removed_dirs += 1
             
-            # Очищаем старые числовые файлы в текущей директории
+            # Очищаем старые числовые файлы в последней директории
             files_removed = await self._cleanup_numeric_files_async(latest_directory)
             removed_files += files_removed
             
@@ -88,42 +93,6 @@ class DirectoryCleaner:
             self.logger.error(f"❌ Ошибка при очистке директорий: {e}")
             raise
     
-    async def _list_directory_async(self) -> List[str]:
-        """Асинхронно получает список директорий."""
-        try:
-            # Используем asyncio для неблокирующего чтения директории
-            loop = asyncio.get_event_loop()
-            entries = await loop.run_in_executor(None, os.listdir, str(self.base_dir))
-            return entries
-        except OSError as e:
-            self.logger.error(f"Ошибка чтения директории {self.base_dir}: {e}")
-            return []
-    
-    async def _find_date_directories_async(self) -> List[Path]:
-        """Рекурсивно находит все директории с форматом даты yyyyMMdd."""
-        date_directories = []
-        
-        try:
-            # Используем asyncio для неблокирующего обхода директорий
-            loop = asyncio.get_event_loop()
-            
-            def find_directories():
-                directories = []
-                for root, dirs, files in os.walk(self.base_dir):
-                    for dir_name in dirs:
-                        if self.date_pattern.match(dir_name):
-                            dir_path = Path(root) / dir_name
-                            directories.append(dir_path)
-                return directories
-            
-            date_directories = await loop.run_in_executor(None, find_directories)
-            self.logger.debug(f"Найдено {len(date_directories)} директорий с датами")
-            
-        except Exception as e:
-            self.logger.error(f"Ошибка при поиске директорий с датами: {e}")
-        
-        return date_directories
-    
     async def _remove_directory_async(self, dir_path: Path) -> None:
         """Асинхронно удаляет директорию."""
         try:
@@ -132,113 +101,39 @@ class DirectoryCleaner:
         except OSError as e:
             self.logger.error(f"Ошибка удаления директории {dir_path}: {e}")
     
-    async def _cleanup_today_directory_async(self, dir_path: Path, cutoff_time: datetime) -> int:
-        """Асинхронно очищает файлы в сегодняшней директории.
-        
-        Args:
-            dir_path: Путь к директории
-            cutoff_time: Время, после которого файлы считаются старыми
-            
-        Returns:
-            int: Количество удаленных файлов
-        """
-        removed_files = 0
-        
-        # Получаем текущий файл из SingleFileTailWatcher для защиты
-        current_file_path = None
-        if self.single_file_watcher:
-            try:
-                status = self.single_file_watcher.get_status()
-                current_file_path = status.get("current_file")
-                if current_file_path:
-                    current_file_path = Path(current_file_path)
-                    self.logger.debug(f"🛡️ Защищаем текущий файл от удаления: {current_file_path}")
-            except Exception as e:
-                self.logger.warning(f"Не удалось получить текущий файл из watcher: {e}")
-        
-        try:
-            # Рекурсивно обходим директорию
-            for root, _, files in os.walk(dir_path):
-                for file in files:
-                    file_path = Path(root) / file
-                    
-                    # Проверяем, не является ли это текущим файлом
-                    if current_file_path and file_path == current_file_path:
-                        self.logger.debug(f"🛡️ Пропускаем удаление текущего файла: {file_path}")
-                        continue
-                    
-                    try:
-                        # Получаем время модификации файла
-                        mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
-                        
-                        if mtime < cutoff_time:
-                            self.logger.debug(f"🗑️ Удаляем старый файл: {file_path}")
-                            file_path.unlink()
-                            removed_files += 1
-                            
-                    except OSError as e:
-                        self.logger.warning(f"Не удалось удалить файл {file_path}: {e}")
-                        
-        except Exception as e:
-            self.logger.error(f"Ошибка при очистке директории {dir_path}: {e}")
-        
-        return removed_files
-    
     async def _cleanup_numeric_files_async(self, dir_path: Path) -> int:
         """Cleanup numeric files in directory, keeping only the last 3 files.
         
         Args:
-            dir_path: Path to directory containing numeric files
+            dir_path: Path to date directory (e.g., /app/node_logs/node_order_statuses/hourly/20251009)
             
         Returns:
             Number of files removed
         """
         removed_files = 0
         
-        # Get current file from SingleFileTailWatcher for protection
-        current_file_path = None
-        if self.single_file_watcher:
-            try:
-                status = self.single_file_watcher.get_status()
-                current_file_path = status.get("current_file")
-                if current_file_path:
-                    current_file_path = Path(current_file_path)
-                    self.logger.debug(f"🛡️ Protecting current file from deletion: {current_file_path}")
-            except Exception as e:
-                self.logger.warning(f"Failed to get current file from watcher: {e}")
-        
         try:
-            # Find all numeric files in directory (recursively in hourly subdirectory)
-            hourly_path = dir_path / "node_order_statuses" / "hourly"
-            if not hourly_path.exists():
-                self.logger.debug(f"Hourly path does not exist: {hourly_path}")
-                return 0
-            
+            # Find all numeric files in directory
             numeric_files = []
-            for file_path in hourly_path.iterdir():
+            for file_path in dir_path.iterdir():
                 if file_path.is_file() and file_path.name.isdigit():
                     numeric_files.append(file_path)
             
             if not numeric_files:
-                self.logger.debug(f"No numeric files found in {hourly_path}")
+                self.logger.debug(f"No numeric files found in {dir_path}")
                 return 0
             
-            # Sort files by name (numeric) in descending order (newest first)
+            # Sort by numeric name (descending = newest first)
             numeric_files.sort(key=lambda f: int(f.name), reverse=True)
             
-            self.logger.info(f"Found {len(numeric_files)} numeric files, keeping last 3")
+            self.logger.info(f"Found {len(numeric_files)} numeric files in {dir_path.name}, keeping last 3")
             
-            # Keep only last 3 files, delete the rest
-            files_to_delete = numeric_files[3:]  # Skip first 3 (newest)
+            # Keep last 3, delete the rest
+            files_to_delete = numeric_files[3:]
             
             for file_path in files_to_delete:
-                # Skip if this is the current file
-                if current_file_path and file_path == current_file_path:
-                    self.logger.info(f"🛡️ Skipping deletion of current file: {file_path}")
-                    continue
-                
                 try:
-                    self.logger.info(f"🗑️ Deleting old numeric file: {file_path.name}")
+                    self.logger.info(f"🗑️ Deleting old file: {file_path.name}")
                     loop = asyncio.get_event_loop()
                     await loop.run_in_executor(None, file_path.unlink)
                     removed_files += 1
@@ -246,7 +141,7 @@ class DirectoryCleaner:
                     self.logger.warning(f"Failed to delete file {file_path}: {e}")
             
             if removed_files > 0:
-                self.logger.info(f"✅ Deleted {removed_files} old numeric files from {hourly_path}")
+                self.logger.info(f"✅ Deleted {removed_files} old files from {dir_path.name}")
             
         except Exception as e:
             self.logger.error(f"Error cleaning up numeric files in {dir_path}: {e}")
