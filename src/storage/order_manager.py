@@ -72,16 +72,16 @@ class OrderManager:
             symbol_config = next((sc for sc in config.symbols_config if sc.symbol == order.symbol), None)
             if symbol_config is None:
                 self.filtered_orders_count += 1
-                if self.filtered_orders_count % 100 == 0:  # Log every 100 filtered orders
+                if self.filtered_orders_count % 1000 == 0:
                     self.logger.info(f"Filtered {self.filtered_orders_count} orders total")
-                self.logger.debug(f"Order {order.id} filtered: symbol '{order.symbol}' not in supported symbols (total: {len(config.symbols_config)})")
                 return False
             
             # Check minimum liquidity requirement
             order_liquidity = order.price * order.size
             if order_liquidity < symbol_config.min_liquidity:
                 self.filtered_orders_count += 1
-                self.logger.debug(f"Order {order.id} filtered: liquidity {order_liquidity:.2f} < min {symbol_config.min_liquidity:.2f} for {order.symbol}")
+                if self.filtered_orders_count % 1000 == 0:
+                    self.logger.info(f"Order {order.id} filtered: liquidity {order_liquidity:.2f} < min {symbol_config.min_liquidity:.2f} for {order.symbol}")
                 return False
             
             self.processed_orders_count += 1
