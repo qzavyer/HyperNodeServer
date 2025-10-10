@@ -1,61 +1,82 @@
 """
-Модуль для очистки директорий с логами.
-Интегрирует функциональность из clean.py в архитектуру приложения.
+Module for cleaning directories with logs.
+Integrates the functionality from clean.py into the application architecture.
 """
 
 import os
 import re
 import shutil
 import asyncio
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Tuple
-import logging
+from typing import Tuple, Optional
 
-from config.settings import settings
 from src.utils.logger import setup_logger
 
 
 class DirectoryCleaner:
-    """Класс для очистки директорий с логами."""
+    """Class for cleaning directories with logs."""
     
     def __init__(self, base_dir: str = "/app/node_logs", single_file_watcher=None):
-        """Инициализация очистителя директорий.
+        """Initialization of the directory cleaner.
         
         Args:
-            base_dir: Базовая директория для очистки
-            single_file_watcher: Ссылка на SingleFileTailWatcher для защиты текущего файла
+            base_dir: Base directory for cleanup
+            single_file_watcher: Link to SingleFileTailWatcher for protection of the current file
         """
         self.base_dir = Path(base_dir).expanduser().resolve()
-        # Директория с числовыми файлами для очистки
+        # Directory with numeric files for cleanup
         self.target_cleanup_path = self.base_dir / "node_order_statuses" / "hourly"
+        self.replica_path = self.base_dir / "replica_cmds"
+        self.max_replica_dirs = 10  # Maximum number of replica_cmds directories to keep
         self.logger = setup_logger(__name__)
         self.single_file_watcher = single_file_watcher
         
-        # Регулярка для поиска папок с форматом даты yyyyMMdd
+        # Regular expression for finding directories with date format yyyyMMdd
         self.date_pattern = re.compile(r"^\d{8}$")
         
-        # Настройки очистки
-        self.cleanup_interval_hours = 1  # Очистка каждый час
-        self.file_retention_hours = 1    # Файлы старше 1 часа удаляются
+        # Cleanup settings
+        self.cleanup_interval_hours = 1  # Cleanup every hour
+        self.file_retention_hours = 1    # Files older than 1 hour are deleted
         
     async def cleanup_async(self) -> Tuple[int, int]:
-        """Асинхронная очистка директорий.
+        """Async cleanup of directories.
         
         Returns:
-            Tuple[int, int]: (количество удаленных директорий, количество удаленных файлов)
+            Tuple[int, int]: (number of removed directories, number of removed files)
+        """
+        try:
+            removed_files = 0
+            
+            removed_dirs, latest_directory = await self._cleanup_orders_async()
+
+            if latest_directory:
+                # Clean up old numeric files in the latest directory
+                files_removed = await self._cleanup_numeric_files_async(latest_directory)
+                removed_files += files_removed
+
+            removed_dirs += await self._cleanup_replica_cmds_async()
+
+            self.logger.info(f"✅ Cleanup completed: removed {removed_dirs} directories, {removed_files} files")
+            return removed_dirs, removed_files
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning directories: {e}")
+            raise
+
+    async def _cleanup_orders_async(self) -> Tuple[int, Optional[Path]]:
+        """Async cleanup of the node_order_statuses directory.
+    
+        Returns:
+            Tuple[int, Optional[Path]]: (number of removed directories, latest directory or None)
         """
         try:
             self.logger.info(f"🧹 Starting cleanup in: {self.target_cleanup_path}")
             
             if not self.target_cleanup_path.exists():
                 self.logger.warning(f"Target cleanup path does not exist: {self.target_cleanup_path}")
-                return 0, 0
+                return 0, None
             
-            removed_dirs = 0
-            removed_files = 0
-            
-            # Находим все директории с датами в target_cleanup_path
+            # Find all directories with dates in target_cleanup_path
             date_directories = []
             for item in self.target_cleanup_path.iterdir():
                 if item.is_dir() and self.date_pattern.match(item.name):
@@ -63,43 +84,80 @@ class DirectoryCleaner:
             
             if not date_directories:
                 self.logger.info("No date directories found")
-                return 0, 0
+                return 0, None
             
-            # Сортируем по имени (формат yyyyMMdd)
+            # Sort by name (format yyyyMMdd)
             date_directories.sort(key=lambda p: p.name, reverse=True)
             
             self.logger.info(f"Found {len(date_directories)} date directories in {self.target_cleanup_path}")
             
-            # Оставляем последнюю директорию
+            # Keep the latest directory
             latest_directory = date_directories[0]
             directories_to_remove = date_directories[1:]
             
             self.logger.info(f"Keeping latest directory: {latest_directory.name}")
             
-            # Удаляем старые директории
+            removed_dirs = 0
+            # Delete old directories
             for dir_path in directories_to_remove:
                 self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
                 await self._remove_directory_async(dir_path)
                 removed_dirs += 1
-            
-            # Очищаем старые числовые файлы в последней директории
-            files_removed = await self._cleanup_numeric_files_async(latest_directory)
-            removed_files += files_removed
-            
-            self.logger.info(f"✅ Очистка завершена: удалено {removed_dirs} директорий, {removed_files} файлов")
-            return removed_dirs, removed_files
-            
+
+            return removed_dirs, latest_directory
+
         except Exception as e:
-            self.logger.error(f"❌ Ошибка при очистке директорий: {e}")
+            self.logger.error(f"❌ Error cleaning directories: {e}")
+            raise
+
+    async def _cleanup_replica_cmds_async(self) -> int:
+        """Async cleanup of the replica_cmds directory.
+    
+        Returns:
+            int: Number of removed directories
+        """
+        try:
+            self.logger.info(f"🧹 Starting cleanup in: {self.replica_path}")
+            if not self.replica_path.exists():
+                self.logger.warning(f"Target cleanup path does not exist: {self.replica_path}")
+                return 0
+            
+            # Find all directories with dates in replica_path
+            directories = []
+            for item in self.replica_path.iterdir():
+                if item.is_dir() and self.date_pattern.match(item.name):
+                    directories.append(item)
+            
+            if not directories:
+                self.logger.info("No date directories found")
+                return 0
+            
+            # Sort by name
+            directories.sort(key=lambda p: p.name, reverse=True)
+            
+            self.logger.info(f"Found {len(directories)} directories in {self.replica_path}")
+            
+
+            directories_to_remove = directories[self.max_replica_dirs:]
+            removed_dirs = 0
+            # Delete old directories
+            for dir_path in directories_to_remove:
+                self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
+                await self._remove_directory_async(dir_path)
+                removed_dirs += 1
+
+            return removed_dirs
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning directories: {e}")
             raise
     
     async def _remove_directory_async(self, dir_path: Path) -> None:
-        """Асинхронно удаляет директорию."""
+        """Async remove directory."""
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, shutil.rmtree, str(dir_path))
         except OSError as e:
-            self.logger.error(f"Ошибка удаления директории {dir_path}: {e}")
+            self.logger.error(f"Error removing directory {dir_path}: {e}")
     
     async def _cleanup_numeric_files_async(self, dir_path: Path) -> int:
         """Cleanup numeric files in directory, keeping only the last 3 files.
@@ -149,23 +207,23 @@ class DirectoryCleaner:
         return removed_files
     
     async def start_periodic_cleanup_async(self) -> None:
-        """Запускает периодическую очистку каждые N часов."""
-        self.logger.info(f"🔄 Запускаем периодическую очистку каждые {self.cleanup_interval_hours} часов")
+        """Start periodic cleanup every N hours."""
+        self.logger.info(f"🔄 Starting periodic cleanup every {self.cleanup_interval_hours} hours")
         
         while True:
             try:
-                await asyncio.sleep(self.cleanup_interval_hours * 3600)  # Конвертируем часы в секунды
+                await asyncio.sleep(self.cleanup_interval_hours * 3600)  # Convert hours to seconds
                 await self.cleanup_async()
             except asyncio.CancelledError:
-                self.logger.info("🛑 Периодическая очистка остановлена")
+                self.logger.info("🛑 Periodic cleanup stopped")
                 break
             except Exception as e:
-                self.logger.error(f"❌ Ошибка в периодической очистке: {e}")
-                # Продолжаем работу даже при ошибке
-                await asyncio.sleep(60)  # Ждем минуту перед следующей попыткой
+                self.logger.error(f"❌ Error in periodic cleanup: {e}")
+                # Continue working even with an error
+                await asyncio.sleep(60)  # Wait 1 minute before trying again
     
     def get_cleanup_stats(self) -> dict:
-        """Получает статистику очистки."""
+        """Get cleanup statistics."""
         return {
             "base_directory": str(self.base_dir),
             "cleanup_interval_hours": self.cleanup_interval_hours,
@@ -175,7 +233,7 @@ class DirectoryCleaner:
         }
     
     def _get_directory_size_mb(self) -> float:
-        """Получает размер директории в мегабайтах."""
+        """Get directory size in megabytes."""
         try:
             total_size = 0
             for dirpath, dirnames, filenames in os.walk(self.base_dir):
@@ -183,6 +241,6 @@ class DirectoryCleaner:
                     filepath = os.path.join(dirpath, filename)
                     if os.path.exists(filepath):
                         total_size += os.path.getsize(filepath)
-            return total_size / (1024 * 1024)  # Конвертируем в MB
+            return total_size / (1024 * 1024)  # Convert to MB
         except Exception:
             return 0.0
