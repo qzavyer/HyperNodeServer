@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     
     # Node logs path
     NODE_LOGS_PATH: str = "/app/node_logs"
+    NODE_LOGS_PATH_HYPERLIQUID: str = "/app/node_logs_hyperliquid"
     
     # Cleanup settings
     CLEANUP_INTERVAL_HOURS: int = 2
