@@ -119,7 +119,7 @@ order_notifier = OrderNotifier(websocket_manager, config_manager)
 order_manager = OrderManager(config_manager, order_notifier)
 single_file_tail_watcher = SingleFileTailWatcher(order_manager, websocket_manager)
 reactive_order_watcher = ReactiveOrderWatcher(settings.NODE_LOGS_PATH, order_manager, websocket_manager, config_manager)
-directory_cleaner = DirectoryCleaner(settings.NODE_LOGS_PATH, single_file_tail_watcher)
+directory_cleaner = DirectoryCleaner(base_dir=settings.NODE_LOGS_PATH, single_file_watcher=single_file_tail_watcher)
 node_health_monitor = None  # Will be initialized in startup_event
 
 # Set WebSocket manager in routes
