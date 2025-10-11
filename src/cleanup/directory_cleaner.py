@@ -16,7 +16,7 @@ from src.utils.logger import setup_logger
 class DirectoryCleaner:
     """Class for cleaning directories with logs."""
     
-    def __init__(self, base_dir: str = "/app/node_logs", single_file_watcher=None):
+    def __init__(self, base_dir: str = "/app/node_logs", hyperliquid_data_dir: str = "/app/hyperliquid_data", single_file_watcher=None):
         """Initialization of the directory cleaner.
         
         Args:
@@ -24,10 +24,13 @@ class DirectoryCleaner:
             single_file_watcher: Link to SingleFileTailWatcher for protection of the current file
         """
         self.base_dir = Path(base_dir).expanduser().resolve()
+        self.hyperliquid_data_dir = Path(hyperliquid_data_dir).expanduser().resolve()
         # Directory with numeric files for cleanup
         self.target_cleanup_path = self.base_dir / "node_order_statuses" / "hourly"
         self.replica_path = self.base_dir / "replica_cmds"
-        self.max_replica_dirs = 10  # Maximum number of replica_cmds directories to keep
+        self.checkpoints_path = self.hyperliquid_data_dir / "evm_db_hub_slow" / "checkpoint"
+        self.max_replica_dirs = 5  # Maximum number of replica_cmds directories to keep
+        self.max_checkpoints_dirs = 10  # Maximum number of checkpoints directories to keep
         self.logger = setup_logger(__name__)
         self.single_file_watcher = single_file_watcher
         
@@ -55,6 +58,7 @@ class DirectoryCleaner:
                 removed_files += files_removed
 
             removed_dirs += await self._cleanup_replica_cmds_async()
+            removed_dirs += await self._cleanup_checkpoints_async()
 
             self.logger.info(f"✅ Cleanup completed: removed {removed_dirs} directories, {removed_files} files")
             return removed_dirs, removed_files
@@ -139,6 +143,47 @@ class DirectoryCleaner:
             
 
             directories_to_remove = directories[self.max_replica_dirs:]
+            removed_dirs = 0
+            # Delete old directories
+            for dir_path in directories_to_remove:
+                self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
+                await self._remove_directory_async(dir_path)
+                removed_dirs += 1
+
+            return removed_dirs
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning directories: {e}")
+            raise
+    
+    async def _cleanup_checkpoints_async(self) -> int:
+        """Async cleanup of the checkpoints directory.
+    
+        Returns:
+            int: Number of removed directories
+        """
+        try:
+            self.logger.info(f"🧹 Starting cleanup in: {self.checkpoints_path}")
+            if not self.checkpoints_path.exists():
+                self.logger.warning(f"Target cleanup path does not exist: {self.checkpoints_path}")
+                return 0
+            
+            # Find all directories with dates in checkpoints_path
+            directories = []
+            for item in self.checkpoints_path.iterdir():
+                if item.is_dir() and self.date_pattern.match(item.name):
+                    directories.append(item)
+            
+            if not directories:
+                self.logger.info("No date directories found")
+                return 0
+            
+            # Sort by name
+            directories.sort(key=lambda p: p.name, reverse=True)
+            
+            self.logger.info(f"Found {len(directories)} directories in {self.checkpoints_path}")
+            
+
+            directories_to_remove = directories[self.max_checkpoints_dirs:]
             removed_dirs = 0
             # Delete old directories
             for dir_path in directories_to_remove:
