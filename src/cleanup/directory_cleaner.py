@@ -28,6 +28,9 @@ class DirectoryCleaner:
         # Directory with numeric files for cleanup
         self.target_cleanup_path = self.base_dir / "node_order_statuses" / "hourly"
         self.replica_path = self.base_dir / "replica_cmds"
+        self.periodic_abci_path = self.base_dir / "periodic_abci_states"
+        self.evm_block_receipts_path = self.base_dir / "evm_block_and_receipts" / "hourly"
+        self.node_fast_block_times_path = self.base_dir / "node_fast_block_times"
         self.checkpoints_path = self.hyperliquid_data_dir / "evm_db_hub_slow" / "checkpoint"
         self.max_replica_dirs = 5  # Maximum number of replica_cmds directories to keep
         self.max_checkpoints_dirs = 10  # Maximum number of checkpoints directories to keep
@@ -36,6 +39,8 @@ class DirectoryCleaner:
         
         # Regular expression for finding directories with date format yyyyMMdd
         self.date_pattern = re.compile(r"^\d{8}$")
+        # Regular expression for ISO 8601 format (2025-10-10T23:11:09Z or 2025-10-10T23-11-09Z for Windows)
+        self.iso_datetime_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}[:\-]\d{2}[:\-]\d{2}Z$")
         
         # Cleanup settings
         self.cleanup_interval_hours = 1  # Cleanup every hour
@@ -58,6 +63,9 @@ class DirectoryCleaner:
                 removed_files += files_removed
 
             removed_dirs += await self._cleanup_replica_cmds_async()
+            removed_dirs += await self._cleanup_periodic_abci_async()
+            removed_dirs += await self._cleanup_evm_block_receipts_async()
+            removed_dirs += await self._cleanup_node_fast_block_times_async()
             removed_dirs += await self._cleanup_checkpoints_async()
 
             self.logger.info(f"✅ Cleanup completed: removed {removed_dirs} directories, {removed_files} files")
@@ -116,6 +124,7 @@ class DirectoryCleaner:
 
     async def _cleanup_replica_cmds_async(self) -> int:
         """Async cleanup of the replica_cmds directory.
+        Removes directories with ISO datetime format (2025-10-10T23:11:09Z).
     
         Returns:
             int: Number of removed directories
@@ -126,24 +135,25 @@ class DirectoryCleaner:
                 self.logger.warning(f"Target cleanup path does not exist: {self.replica_path}")
                 return 0
             
-            # Find all directories with dates in replica_path
+            # Find all directories with ISO datetime format in replica_path
             directories = []
             for item in self.replica_path.iterdir():
-                if item.is_dir() and self.date_pattern.match(item.name):
+                if item.is_dir() and self.iso_datetime_pattern.match(item.name):
                     directories.append(item)
             
             if not directories:
-                self.logger.info("No date directories found")
+                self.logger.info("No ISO datetime directories found in replica_cmds")
                 return 0
             
-            # Sort by name
+            # Sort by name (ISO format sorts correctly alphabetically)
             directories.sort(key=lambda p: p.name, reverse=True)
             
             self.logger.info(f"Found {len(directories)} directories in {self.replica_path}")
             
-
+            # Keep last max_replica_dirs directories
             directories_to_remove = directories[self.max_replica_dirs:]
             removed_dirs = 0
+            
             # Delete old directories
             for dir_path in directories_to_remove:
                 self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
@@ -152,7 +162,136 @@ class DirectoryCleaner:
 
             return removed_dirs
         except Exception as e:
-            self.logger.error(f"❌ Error cleaning directories: {e}")
+            self.logger.error(f"❌ Error cleaning replica_cmds directories: {e}")
+            raise
+    
+    async def _cleanup_periodic_abci_async(self) -> int:
+        """Async cleanup of the periodic_abci_states directory.
+        Keeps only the latest directory (in yyyyMMdd format).
+    
+        Returns:
+            int: Number of removed directories
+        """
+        try:
+            self.logger.info(f"🧹 Starting cleanup in: {self.periodic_abci_path}")
+            if not self.periodic_abci_path.exists():
+                self.logger.warning(f"Target cleanup path does not exist: {self.periodic_abci_path}")
+                return 0
+            
+            # Find all directories with date format in periodic_abci_path
+            directories = []
+            for item in self.periodic_abci_path.iterdir():
+                if item.is_dir() and self.date_pattern.match(item.name):
+                    directories.append(item)
+            
+            if not directories:
+                self.logger.info("No date directories found in periodic_abci_states")
+                return 0
+            
+            # Sort by name (yyyyMMdd format)
+            directories.sort(key=lambda p: p.name, reverse=True)
+            
+            self.logger.info(f"Found {len(directories)} directories in {self.periodic_abci_path}")
+            
+            # Keep only the latest directory, delete all others
+            directories_to_remove = directories[1:]
+            removed_dirs = 0
+            
+            # Delete old directories
+            for dir_path in directories_to_remove:
+                self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
+                await self._remove_directory_async(dir_path)
+                removed_dirs += 1
+
+            return removed_dirs
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning periodic_abci_states directories: {e}")
+            raise
+    
+    async def _cleanup_evm_block_receipts_async(self) -> int:
+        """Async cleanup of the evm_block_and_receipts/hourly directory.
+        Keeps only the latest directory (in yyyyMMdd format).
+    
+        Returns:
+            int: Number of removed directories
+        """
+        try:
+            self.logger.info(f"🧹 Starting cleanup in: {self.evm_block_receipts_path}")
+            if not self.evm_block_receipts_path.exists():
+                self.logger.warning(f"Target cleanup path does not exist: {self.evm_block_receipts_path}")
+                return 0
+            
+            # Find all directories with date format in evm_block_receipts_path
+            directories = []
+            for item in self.evm_block_receipts_path.iterdir():
+                if item.is_dir() and self.date_pattern.match(item.name):
+                    directories.append(item)
+            
+            if not directories:
+                self.logger.info("No date directories found in evm_block_and_receipts/hourly")
+                return 0
+            
+            # Sort by name (yyyyMMdd format)
+            directories.sort(key=lambda p: p.name, reverse=True)
+            
+            self.logger.info(f"Found {len(directories)} directories in {self.evm_block_receipts_path}")
+            
+            # Keep only the latest directory, delete all others
+            directories_to_remove = directories[1:]
+            removed_dirs = 0
+            
+            # Delete old directories
+            for dir_path in directories_to_remove:
+                self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
+                await self._remove_directory_async(dir_path)
+                removed_dirs += 1
+
+            return removed_dirs
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning evm_block_and_receipts directories: {e}")
+            raise
+    
+    async def _cleanup_node_fast_block_times_async(self) -> int:
+        """Async cleanup of the node_fast_block_times directory.
+        Keeps only the latest directory (in yyyyMMdd format).
+    
+        Returns:
+            int: Number of removed directories
+        """
+        try:
+            self.logger.info(f"🧹 Starting cleanup in: {self.node_fast_block_times_path}")
+            if not self.node_fast_block_times_path.exists():
+                self.logger.warning(f"Target cleanup path does not exist: {self.node_fast_block_times_path}")
+                return 0
+            
+            # Find all directories with date format in node_fast_block_times_path
+            directories = []
+            for item in self.node_fast_block_times_path.iterdir():
+                if item.is_dir() and self.date_pattern.match(item.name):
+                    directories.append(item)
+            
+            if not directories:
+                self.logger.info("No date directories found in node_fast_block_times")
+                return 0
+            
+            # Sort by name (yyyyMMdd format)
+            directories.sort(key=lambda p: p.name, reverse=True)
+            
+            self.logger.info(f"Found {len(directories)} directories in {self.node_fast_block_times_path}")
+            
+            # Keep only the latest directory, delete all others
+            directories_to_remove = directories[1:]
+            removed_dirs = 0
+            
+            # Delete old directories
+            for dir_path in directories_to_remove:
+                self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
+                await self._remove_directory_async(dir_path)
+                removed_dirs += 1
+
+            return removed_dirs
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning node_fast_block_times directories: {e}")
             raise
     
     async def _cleanup_checkpoints_async(self) -> int:
@@ -174,7 +313,7 @@ class DirectoryCleaner:
                     directories.append(item)
             
             if not directories:
-                self.logger.info("No date directories found")
+                self.logger.info("No date directories found in checkpoints")
                 return 0
             
             # Sort by name
@@ -182,9 +321,10 @@ class DirectoryCleaner:
             
             self.logger.info(f"Found {len(directories)} directories in {self.checkpoints_path}")
             
-
+            # Keep last max_checkpoints_dirs directories
             directories_to_remove = directories[self.max_checkpoints_dirs:]
             removed_dirs = 0
+            
             # Delete old directories
             for dir_path in directories_to_remove:
                 self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
@@ -193,7 +333,7 @@ class DirectoryCleaner:
 
             return removed_dirs
         except Exception as e:
-            self.logger.error(f"❌ Error cleaning directories: {e}")
+            self.logger.error(f"❌ Error cleaning checkpoints directories: {e}")
             raise
     
     async def _remove_directory_async(self, dir_path: Path) -> None:

@@ -30,6 +30,7 @@ class TestDirectoryCleaner:
         assert self.cleaner.cleanup_interval_hours == 1
         assert self.cleaner.file_retention_hours == 1
         assert self.cleaner.date_pattern.pattern == r"^\d{8}$"
+        assert self.cleaner.iso_datetime_pattern.pattern == r"^\d{4}-\d{2}-\d{2}T\d{2}[:\-]\d{2}[:\-]\d{2}Z$"
     
     def test_init_with_custom_settings(self):
         """Test DirectoryCleaner with custom settings."""
@@ -364,3 +365,305 @@ class TestDirectoryCleaner:
         assert date1 in dir_names
         assert date2 in dir_names
         assert date3 in dir_names
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_replica_cmds_async(self):
+        """Test cleanup of replica_cmds directory with ISO datetime format."""
+        # Create replica_cmds directory structure
+        replica_path = Path(self.temp_dir) / "replica_cmds"
+        replica_path.mkdir()
+        
+        # Create directories with ISO datetime format (replace : with - for Windows compatibility)
+        iso_dates = [
+            "2025-10-01T10-30-00Z",
+            "2025-10-02T11-45-00Z",
+            "2025-10-03T12-00-00Z",
+            "2025-10-04T13-15-00Z",
+            "2025-10-05T14-30-00Z",
+            "2025-10-06T15-45-00Z",
+            "2025-10-07T16-00-00Z",
+        ]
+        
+        for iso_date in iso_dates:
+            (replica_path / iso_date).mkdir()
+        
+        # Run cleanup (should keep last 5, remove 2 oldest)
+        removed_dirs = await self.cleaner._cleanup_replica_cmds_async()
+        
+        assert removed_dirs == 2
+        # Check that oldest 2 are removed
+        assert not (replica_path / "2025-10-01T10-30-00Z").exists()
+        assert not (replica_path / "2025-10-02T11-45-00Z").exists()
+        # Check that newest 5 still exist
+        assert (replica_path / "2025-10-03T12-00-00Z").exists()
+        assert (replica_path / "2025-10-04T13-15-00Z").exists()
+        assert (replica_path / "2025-10-05T14-30-00Z").exists()
+        assert (replica_path / "2025-10-06T15-45-00Z").exists()
+        assert (replica_path / "2025-10-07T16-00-00Z").exists()
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_replica_cmds_async_no_directories(self):
+        """Test cleanup of replica_cmds with no directories."""
+        # Create replica_cmds directory but don't add any subdirectories
+        replica_path = Path(self.temp_dir) / "replica_cmds"
+        replica_path.mkdir()
+        
+        removed_dirs = await self.cleaner._cleanup_replica_cmds_async()
+        
+        assert removed_dirs == 0
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_replica_cmds_async_less_than_max(self):
+        """Test cleanup of replica_cmds when there are fewer directories than max."""
+        # Create replica_cmds directory structure
+        replica_path = Path(self.temp_dir) / "replica_cmds"
+        replica_path.mkdir()
+        
+        # Create only 3 directories (less than max of 5)
+        iso_dates = [
+            "2025-10-01T10-30-00Z",
+            "2025-10-02T11-45-00Z",
+            "2025-10-03T12-00-00Z",
+        ]
+        
+        for iso_date in iso_dates:
+            (replica_path / iso_date).mkdir()
+        
+        removed_dirs = await self.cleaner._cleanup_replica_cmds_async()
+        
+        # Should not remove any directories
+        assert removed_dirs == 0
+        for iso_date in iso_dates:
+            assert (replica_path / iso_date).exists()
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_replica_cmds_async_nonexistent_path(self):
+        """Test cleanup of replica_cmds when path doesn't exist."""
+        removed_dirs = await self.cleaner._cleanup_replica_cmds_async()
+        assert removed_dirs == 0
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_periodic_abci_async(self):
+        """Test cleanup of periodic_abci_states directory."""
+        # Create periodic_abci_states directory structure
+        periodic_path = Path(self.temp_dir) / "periodic_abci_states"
+        periodic_path.mkdir()
+        
+        # Create directories with yyyyMMdd format
+        dates = ["20251001", "20251002", "20251003", "20251004", "20251005"]
+        
+        for date in dates:
+            (periodic_path / date).mkdir()
+        
+        # Run cleanup (should keep only the latest, remove all others)
+        removed_dirs = await self.cleaner._cleanup_periodic_abci_async()
+        
+        assert removed_dirs == 4
+        # Check that only the latest exists
+        assert (periodic_path / "20251005").exists()
+        # Check that all others are removed
+        assert not (periodic_path / "20251001").exists()
+        assert not (periodic_path / "20251002").exists()
+        assert not (periodic_path / "20251003").exists()
+        assert not (periodic_path / "20251004").exists()
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_periodic_abci_async_single_directory(self):
+        """Test cleanup of periodic_abci_states with only one directory."""
+        # Create periodic_abci_states directory structure
+        periodic_path = Path(self.temp_dir) / "periodic_abci_states"
+        periodic_path.mkdir()
+        
+        # Create only one directory
+        (periodic_path / "20251001").mkdir()
+        
+        removed_dirs = await self.cleaner._cleanup_periodic_abci_async()
+        
+        # Should not remove anything
+        assert removed_dirs == 0
+        assert (periodic_path / "20251001").exists()
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_periodic_abci_async_no_directories(self):
+        """Test cleanup of periodic_abci_states with no directories."""
+        # Create periodic_abci_states directory but don't add any subdirectories
+        periodic_path = Path(self.temp_dir) / "periodic_abci_states"
+        periodic_path.mkdir()
+        
+        removed_dirs = await self.cleaner._cleanup_periodic_abci_async()
+        
+        assert removed_dirs == 0
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_periodic_abci_async_nonexistent_path(self):
+        """Test cleanup of periodic_abci_states when path doesn't exist."""
+        removed_dirs = await self.cleaner._cleanup_periodic_abci_async()
+        assert removed_dirs == 0
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_evm_block_receipts_async(self):
+        """Test cleanup of evm_block_and_receipts/hourly directory."""
+        # Create evm_block_and_receipts/hourly directory structure
+        evm_path = Path(self.temp_dir) / "evm_block_and_receipts" / "hourly"
+        evm_path.mkdir(parents=True)
+        
+        # Create directories with yyyyMMdd format
+        dates = ["20251001", "20251002", "20251003", "20251004", "20251005"]
+        
+        for date in dates:
+            (evm_path / date).mkdir()
+        
+        # Run cleanup (should keep only the latest, remove all others)
+        removed_dirs = await self.cleaner._cleanup_evm_block_receipts_async()
+        
+        assert removed_dirs == 4
+        # Check that only the latest exists
+        assert (evm_path / "20251005").exists()
+        # Check that all others are removed
+        assert not (evm_path / "20251001").exists()
+        assert not (evm_path / "20251002").exists()
+        assert not (evm_path / "20251003").exists()
+        assert not (evm_path / "20251004").exists()
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_evm_block_receipts_async_single_directory(self):
+        """Test cleanup of evm_block_and_receipts with only one directory."""
+        # Create evm_block_and_receipts/hourly directory structure
+        evm_path = Path(self.temp_dir) / "evm_block_and_receipts" / "hourly"
+        evm_path.mkdir(parents=True)
+        
+        # Create only one directory
+        (evm_path / "20251001").mkdir()
+        
+        removed_dirs = await self.cleaner._cleanup_evm_block_receipts_async()
+        
+        # Should not remove anything
+        assert removed_dirs == 0
+        assert (evm_path / "20251001").exists()
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_evm_block_receipts_async_nonexistent_path(self):
+        """Test cleanup of evm_block_and_receipts when path doesn't exist."""
+        removed_dirs = await self.cleaner._cleanup_evm_block_receipts_async()
+        assert removed_dirs == 0
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_node_fast_block_times_async(self):
+        """Test cleanup of node_fast_block_times directory."""
+        # Create node_fast_block_times directory structure
+        node_fast_path = Path(self.temp_dir) / "node_fast_block_times"
+        node_fast_path.mkdir()
+        
+        # Create directories with yyyyMMdd format
+        dates = ["20251001", "20251002", "20251003", "20251004"]
+        
+        for date in dates:
+            (node_fast_path / date).mkdir()
+        
+        # Run cleanup (should keep only the latest, remove all others)
+        removed_dirs = await self.cleaner._cleanup_node_fast_block_times_async()
+        
+        assert removed_dirs == 3
+        # Check that only the latest exists
+        assert (node_fast_path / "20251004").exists()
+        # Check that all others are removed
+        assert not (node_fast_path / "20251001").exists()
+        assert not (node_fast_path / "20251002").exists()
+        assert not (node_fast_path / "20251003").exists()
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_node_fast_block_times_async_single_directory(self):
+        """Test cleanup of node_fast_block_times with only one directory."""
+        # Create node_fast_block_times directory structure
+        node_fast_path = Path(self.temp_dir) / "node_fast_block_times"
+        node_fast_path.mkdir()
+        
+        # Create only one directory
+        (node_fast_path / "20251001").mkdir()
+        
+        removed_dirs = await self.cleaner._cleanup_node_fast_block_times_async()
+        
+        # Should not remove anything
+        assert removed_dirs == 0
+        assert (node_fast_path / "20251001").exists()
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_node_fast_block_times_async_nonexistent_path(self):
+        """Test cleanup of node_fast_block_times when path doesn't exist."""
+        removed_dirs = await self.cleaner._cleanup_node_fast_block_times_async()
+        assert removed_dirs == 0
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_async_all_directories(self):
+        """Test cleanup async includes all directory types."""
+        # Create all directory structures
+        
+        # 1. node_order_statuses/hourly with date directories
+        orders_path = Path(self.temp_dir) / "node_order_statuses" / "hourly"
+        orders_path.mkdir(parents=True)
+        (orders_path / "20251001").mkdir()
+        (orders_path / "20251002").mkdir()
+        
+        # 2. replica_cmds with ISO datetime directories (Windows-compatible format)
+        replica_path = Path(self.temp_dir) / "replica_cmds"
+        replica_path.mkdir()
+        for i in range(7):
+            (replica_path / f"2025-10-0{i+1}T10-00-00Z").mkdir()
+        
+        # 3. periodic_abci_states with date directories
+        periodic_path = Path(self.temp_dir) / "periodic_abci_states"
+        periodic_path.mkdir()
+        (periodic_path / "20251001").mkdir()
+        (periodic_path / "20251002").mkdir()
+        (periodic_path / "20251003").mkdir()
+        
+        # 4. evm_block_and_receipts/hourly with date directories
+        evm_path = Path(self.temp_dir) / "evm_block_and_receipts" / "hourly"
+        evm_path.mkdir(parents=True)
+        (evm_path / "20251001").mkdir()
+        (evm_path / "20251002").mkdir()
+        
+        # 5. node_fast_block_times with date directories
+        node_fast_path = Path(self.temp_dir) / "node_fast_block_times"
+        node_fast_path.mkdir()
+        (node_fast_path / "20251001").mkdir()
+        (node_fast_path / "20251002").mkdir()
+        (node_fast_path / "20251003").mkdir()
+        
+        # Run full cleanup
+        removed_dirs, removed_files = await self.cleaner.cleanup_async()
+        
+        # Should remove:
+        # - 1 from node_order_statuses (keeps latest)
+        # - 2 from replica_cmds (keeps 5 latest)
+        # - 2 from periodic_abci_states (keeps 1 latest)
+        # - 1 from evm_block_and_receipts (keeps 1 latest)
+        # - 2 from node_fast_block_times (keeps 1 latest)
+        # Total: 8 directories
+        assert removed_dirs == 8
+    
+    @pytest.mark.asyncio
+    async def test_iso_datetime_pattern_validation(self):
+        """Test ISO datetime pattern regex validation."""
+        valid_patterns = [
+            "2025-10-10T23:11:09Z",  # Standard format with colons
+            "2025-10-10T23-11-09Z",  # Windows-compatible format with dashes
+            "2023-01-01T00:00:00Z",
+            "2024-12-31T23:59:59Z",
+            "2023-01-01T00-00-00Z",  # Windows-compatible
+        ]
+        
+        invalid_patterns = [
+            "2025-10-10",
+            "2025-10-10T23:11:09",  # Missing Z
+            "20251010T231109Z",      # No separators
+            "2025-10-10 23:11:09Z",  # Space instead of T
+            "20251010",              # Simple date format
+            "2025-10-10T23:11:09",   # Missing Z
+        ]
+        
+        for pattern in valid_patterns:
+            assert self.cleaner.iso_datetime_pattern.match(pattern), f"Should match: {pattern}"
+        
+        for pattern in invalid_patterns:
+            assert not self.cleaner.iso_datetime_pattern.match(pattern), f"Should not match: {pattern}"
