@@ -39,6 +39,7 @@ class TestConfigManager:
         """Test loading config creates default when file doesn't exist."""
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.DATA_PATH = "/test/path"
             mock_settings.CLEANUP_INTERVAL_HOURS = 5
             mock_settings.API_HOST = "127.0.0.1"
             mock_settings.API_PORT = 9000
@@ -133,6 +134,7 @@ class TestConfigManager:
         """Test saving configuration."""
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.DATA_PATH = "/test/path"
             mock_settings.CLEANUP_INTERVAL_HOURS = 5
             mock_settings.API_HOST = "127.0.0.1"
             mock_settings.API_PORT = 9000
@@ -174,6 +176,7 @@ class TestConfigManager:
         """Test updating configuration."""
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.DATA_PATH = "/test/path"
             mock_settings.CLEANUP_INTERVAL_HOURS = 5
             mock_settings.API_HOST = "127.0.0.1"
             mock_settings.API_PORT = 9000
@@ -220,6 +223,7 @@ class TestConfigManager:
         """Test updating config handles invalid updates."""
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.DATA_PATH = "/test/path"
             mock_settings.CLEANUP_INTERVAL_HOURS = 5
             mock_settings.API_HOST = "127.0.0.1"
             mock_settings.API_PORT = 9000
@@ -246,6 +250,7 @@ class TestConfigManager:
         """Test updating symbols configuration only."""
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.DATA_PATH = "/test/path"
             mock_settings.CLEANUP_INTERVAL_HOURS = 5
             mock_settings.API_HOST = "127.0.0.1"
             mock_settings.API_PORT = 9000
@@ -308,6 +313,7 @@ class TestConfigManager:
         """Test updating symbols with empty list."""
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.DATA_PATH = "/test/path"
             mock_settings.CLEANUP_INTERVAL_HOURS = 5
             mock_settings.API_HOST = "127.0.0.1"
             mock_settings.API_PORT = 9000
@@ -343,6 +349,7 @@ class TestConfigManager:
         """Test updating symbols handles save error."""
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/test/path"
+            mock_settings.DATA_PATH = "/test/path"
             mock_settings.CLEANUP_INTERVAL_HOURS = 5
             mock_settings.API_HOST = "127.0.0.1"
             mock_settings.API_PORT = 9000

@@ -163,7 +163,7 @@ class ConfigManager:
             Default configuration
         """
         return Config(
-            node_logs_path=settings.NODE_LOGS_PATH,
+            node_logs_path=settings.DATA_PATH,
             cleanup_interval_hours=settings.CLEANUP_INTERVAL_HOURS,
             api_host=settings.API_HOST,
             api_port=settings.API_PORT,

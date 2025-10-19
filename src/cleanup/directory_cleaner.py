@@ -30,6 +30,7 @@ class DirectoryCleaner:
         self.replica_path = self.base_dir / "replica_cmds"
         self.periodic_abci_path = self.base_dir / "periodic_abci_states"
         self.evm_block_receipts_path = self.base_dir / "evm_block_and_receipts" / "hourly"
+        self.validator_connections_path = self.base_dir / "node_logs" / "validator_connections" / "hourly"
         self.node_fast_block_times_path = self.base_dir / "node_fast_block_times"
         self.checkpoints_path = self.hyperliquid_data_dir / "evm_db_hub_slow" / "checkpoint"
         self.max_replica_dirs = 5  # Maximum number of replica_cmds directories to keep
@@ -65,6 +66,7 @@ class DirectoryCleaner:
             removed_dirs += await self._cleanup_replica_cmds_async()
             removed_dirs += await self._cleanup_periodic_abci_async()
             removed_dirs += await self._cleanup_evm_block_receipts_async()
+            removed_dirs += await self._cleanup_validator_connections_async()
             removed_dirs += await self._cleanup_node_fast_block_times_async()
             removed_dirs += await self._cleanup_checkpoints_async()
 
@@ -251,6 +253,49 @@ class DirectoryCleaner:
             self.logger.error(f"❌ Error cleaning evm_block_and_receipts directories: {e}")
             raise
     
+    async def _cleanup_validator_connections_async(self) -> int:
+        """Async cleanup of the validator_connections directory.
+        Keeps only the latest directory (in yyyyMMdd format).
+    
+        Returns:
+            int: Number of removed directories
+        """
+        try:
+            self.logger.info(f"🧹 Starting cleanup in: {self.validator_connections_path}")
+            if not self.validator_connections_path.exists():
+                self.logger.warning(f"Target cleanup path does not exist: {self.validator_connections_path}")
+                return 0
+            
+            # Find all directories with date format in validator_connections_path
+            directories = []
+            for item in self.validator_connections_path.iterdir():
+                if item.is_dir() and self.date_pattern.match(item.name):
+                    directories.append(item)
+            
+            if not directories:
+                self.logger.info("No date directories found in validator_connections")
+                return 0
+            
+            # Sort by name (yyyyMMdd format)
+            directories.sort(key=lambda p: p.name, reverse=True)
+
+            self.logger.info(f"Found {len(directories)} directories in {self.validator_connections_path}")
+            
+            # Keep only the latest directory, delete all others
+            directories_to_remove = directories[1:]
+            removed_dirs = 0
+            
+            # Delete old directories
+            for dir_path in directories_to_remove:
+                self.logger.info(f"🗑️ Deleting old directory: {dir_path.name}")
+                await self._remove_directory_async(dir_path)
+                removed_dirs += 1
+
+            return removed_dirs
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning validator_connections directories: {e}")
+            raise
+
     async def _cleanup_node_fast_block_times_async(self) -> int:
         """Async cleanup of the node_fast_block_times directory.
         Keeps only the latest directory (in yyyyMMdd format).

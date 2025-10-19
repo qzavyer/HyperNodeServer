@@ -108,6 +108,7 @@ class TestIntegration:
         # 2. Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = str(self.logs_dir)
+            mock_settings.DATA_PATH = str(self.data_dir)
             mock_settings.CLEANUP_INTERVAL_HOURS = 2
             mock_settings.API_HOST = "0.0.0.0"
             mock_settings.API_PORT = 8000
@@ -209,6 +210,7 @@ class TestIntegration:
         # Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = str(self.data_dir)
+            mock_settings.DATA_PATH = str(self.data_dir)
             mock_settings.CLEANUP_INTERVAL_HOURS = 2
             mock_settings.API_HOST = "0.0.0.0"
             mock_settings.API_PORT = 8000
@@ -326,6 +328,7 @@ class TestIntegration:
         # Load initial config
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/initial/path"
+            mock_settings.DATA_PATH = "/initial/path"
             mock_settings.CLEANUP_INTERVAL_HOURS = 2
             mock_settings.API_HOST = "0.0.0.0"
             mock_settings.API_PORT = 8000
@@ -388,6 +391,7 @@ class TestIntegration:
         # Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = str(self.data_dir)
+            mock_settings.DATA_PATH = str(self.data_dir)
             mock_settings.CLEANUP_INTERVAL_HOURS = 2
             mock_settings.API_HOST = "0.0.0.0"
             mock_settings.API_PORT = 8000
@@ -478,6 +482,7 @@ class TestIntegration:
         # Load configuration with symbols
         with patch('src.storage.config_manager.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = str(self.data_dir)
+            mock_settings.DATA_PATH = str(self.data_dir)
             mock_settings.CLEANUP_INTERVAL_HOURS = 2
             mock_settings.API_HOST = "0.0.0.0"
             mock_settings.API_PORT = 8000

@@ -12,6 +12,7 @@ from src.monitoring.node_health_monitor import NodeHealthStatus, NodeHealthMonit
 # Create temp directory for tests
 temp_dir = tempfile.mkdtemp()
 os.environ['NODE_LOGS_PATH'] = temp_dir
+os.environ['DATA_PATH'] = temp_dir
 
 client = TestClient(app)
 

@@ -34,6 +34,7 @@ class TestEmergencyCleanup:
         """Create SingleFileTailWatcher instance for testing."""
         with patch('src.watcher.single_file_tail_watcher.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = str(temp_dir)
+            mock_settings.DATA_PATH = str(temp_dir)
             mock_settings.CHUNK_SIZE_BYTES = 1024
             mock_settings.BATCH_SIZE = 100
             mock_settings.TAIL_READLINE_INTERVAL_MS = 100

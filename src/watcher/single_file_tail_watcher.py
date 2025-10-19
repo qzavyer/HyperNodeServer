@@ -59,7 +59,7 @@ class SingleFileTailWatcher:
         """
         self.order_manager = order_manager
         self.websocket_manager = websocket_manager
-        self.logs_path = Path(settings.NODE_LOGS_PATH).expanduser()
+        self.logs_path = Path(settings.DATA_PATH).expanduser()
         self.parser = LogParser(chunk_size=settings.CHUNK_SIZE_BYTES, batch_size=settings.BATCH_SIZE)
         self.is_running = False
         

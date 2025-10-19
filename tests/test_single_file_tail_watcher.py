@@ -45,6 +45,7 @@ class TestSingleFileTailWatcher:
         
         with patch('config.settings.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = str(logs_path)
+            mock_settings.DATA_PATH = str(logs_path)
             mock_settings.CHUNK_SIZE_BYTES = 1024
             mock_settings.BATCH_SIZE = 100
             mock_settings.TAIL_READLINE_INTERVAL_MS = 100
@@ -59,6 +60,7 @@ class TestSingleFileTailWatcher:
         """Test SingleFileTailWatcher initialization."""
         with patch('config.settings.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = "/test/logs"
+            mock_settings.DATA_PATH = "/test/logs"
             mock_settings.CHUNK_SIZE_BYTES = 1024
             mock_settings.BATCH_SIZE = 100
             mock_settings.TAIL_READLINE_INTERVAL_MS = 100
@@ -386,6 +388,7 @@ async def test_integration_find_and_start_current_file():
         
         with patch('config.settings.settings') as mock_settings:
             mock_settings.NODE_LOGS_PATH = str(logs_path)
+            mock_settings.DATA_PATH = str(logs_path)
             mock_settings.CHUNK_SIZE_BYTES = 1024
             mock_settings.BATCH_SIZE = 100
             mock_settings.TAIL_READLINE_INTERVAL_MS = 100
