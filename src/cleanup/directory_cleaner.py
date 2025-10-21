@@ -42,6 +42,8 @@ class DirectoryCleaner:
         self.date_pattern = re.compile(r"^\d{8}$")
         # Regular expression for ISO 8601 format (2025-10-10T23:11:09Z or 2025-10-10T23-11-09Z for Windows)
         self.iso_datetime_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}[:\-]\d{2}[:\-]\d{2}Z$")
+        # Regular expression for numeric checkpoint directories (any length numeric ID)
+        self.numeric_pattern = re.compile(r"^\d+$")
         
         # Cleanup settings
         self.cleanup_interval_hours = 1  # Cleanup every hour
@@ -341,6 +343,7 @@ class DirectoryCleaner:
     
     async def _cleanup_checkpoints_async(self) -> int:
         """Async cleanup of the checkpoints directory.
+        Keeps last N checkpoint directories (numeric IDs like 768860000).
     
         Returns:
             int: Number of removed directories
@@ -351,18 +354,18 @@ class DirectoryCleaner:
                 self.logger.warning(f"Target cleanup path does not exist: {self.checkpoints_path}")
                 return 0
             
-            # Find all directories with dates in checkpoints_path
+            # Find all directories with numeric names in checkpoints_path
             directories = []
             for item in self.checkpoints_path.iterdir():
-                if item.is_dir() and self.date_pattern.match(item.name):
+                if item.is_dir() and self.numeric_pattern.match(item.name):
                     directories.append(item)
             
             if not directories:
-                self.logger.info("No date directories found in checkpoints")
+                self.logger.info("No numeric checkpoint directories found")
                 return 0
             
-            # Sort by name
-            directories.sort(key=lambda p: p.name, reverse=True)
+            # Sort by numeric value (not string) - newest checkpoints have higher numbers
+            directories.sort(key=lambda p: int(p.name), reverse=True)
             
             self.logger.info(f"Found {len(directories)} directories in {self.checkpoints_path}")
             
@@ -439,6 +442,13 @@ class DirectoryCleaner:
     async def start_periodic_cleanup_async(self) -> None:
         """Start periodic cleanup every N hours."""
         self.logger.info(f"🔄 Starting periodic cleanup every {self.cleanup_interval_hours} hours")
+        
+        # Run cleanup immediately on startup
+        try:
+            self.logger.info("🧹 Running initial cleanup on startup")
+            await self.cleanup_async()
+        except Exception as e:
+            self.logger.error(f"❌ Error in initial cleanup: {e}")
         
         while True:
             try:

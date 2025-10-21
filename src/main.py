@@ -176,9 +176,17 @@ async def startup_event():
             logger.error(f"❌ Traceback: {traceback.format_exc()}")
             raise
         
-        # Start directory cleaner
-        asyncio.create_task(directory_cleaner.start_periodic_cleanup_async())
-        logger.info("✅ Directory cleaner started successfully")
+        # Start directory cleaner with error handling
+        async def run_directory_cleaner():
+            try:
+                await directory_cleaner.start_periodic_cleanup_async()
+            except Exception as e:
+                logger.error(f"❌ Directory cleaner failed: {e}")
+                import traceback
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        
+        asyncio.create_task(run_directory_cleaner())
+        logger.info("✅ Directory cleaner task created")
         
     except Exception as e:
         logger.error(f"Failed to start application: {e}")
