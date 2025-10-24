@@ -33,8 +33,8 @@ class DirectoryCleaner:
         self.validator_connections_path = self.base_dir / "node_logs" / "validator_connections" / "hourly"
         self.node_fast_block_times_path = self.base_dir / "node_fast_block_times"
         self.checkpoints_path = self.hyperliquid_data_dir / "evm_db_hub_slow" / "checkpoint"
-        self.max_replica_dirs = 5  # Maximum number of replica_cmds directories to keep
-        self.max_checkpoints_dirs = 10  # Maximum number of checkpoints directories to keep
+        self.max_replica_dirs = 1  # Maximum number of replica_cmds directories to keep
+        self.max_checkpoints_dirs = 5  # Maximum number of checkpoints directories to keep
         self.logger = setup_logger(__name__)
         self.single_file_watcher = single_file_watcher
         
