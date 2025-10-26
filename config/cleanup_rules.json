@@ -1,0 +1,188 @@
+{
+  "version": "1.0",
+  "description": "Правила очистки файлов HyperLiquid Node",
+  "rules": {
+    "temp_directories": {
+      "description": "Временные директории - файлы старше 2 дней от даты в имени",
+      "paths": [
+        {
+          "path": "/home/hl/hl/tmp/fu_write_string_to_file_tmp/",
+          "rule_type": "date_in_filename",
+          "retention_days": 2,
+          "filename_pattern": "YYYY-MM-DD_HH:MM:SS.*"
+        },
+        {
+          "path": "/home/hl/hl/tmp/shell_rs_out/",
+          "rule_type": "date_in_filename", 
+          "retention_days": 2,
+          "filename_pattern": "YYYY-MM-DD_HH:MM:SS.*"
+        }
+      ]
+    },
+    "database_exchange": {
+      "description": "База данных и обмен - последние N файлов",
+      "paths": [
+        {
+          "path": "/home/hl/hl/hyperliquid_data/db_hub/Exchange/",
+          "rule_type": "keep_last_files",
+          "keep_count": 100,
+          "filename_pattern": "\\d+\\.log"
+        }
+      ]
+    },
+    "crit_msg_stats": {
+      "description": "Статистика критических сообщений - последние N файлов",
+      "paths": [
+        {
+          "path": "/home/hl/hl/data/crit_msg_stats/hl-node/",
+          "rule_type": "keep_last_files",
+          "keep_count": 30,
+          "filename_pattern": "yyyyMMdd"
+        },
+        {
+          "path": "/home/hl/hl/data/crit_msg_stats/hl-visor/",
+          "rule_type": "keep_last_files",
+          "keep_count": 30,
+          "filename_pattern": "yyyyMMdd"
+        }
+      ]
+    },
+    "dhs_data": {
+      "description": "Данные DHS - последние N файлов по времени создания",
+      "paths": [
+        {
+          "path": "/home/hl/hl/data/dhs/EvmBlockNumbers/hourly/",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10
+        },
+        {
+          "path": "/home/hl/hl/data/dhs/EvmBlocks/hourly/",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10
+        },
+        {
+          "path": "/home/hl/hl/data/dhs/EvmTxs/hourly/",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10
+        },
+        {
+          "path": "/home/hl/hl/data/evm_block_and_receipts/hourly/",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10
+        }
+      ]
+    },
+    "latency_buckets": {
+      "description": "Метрики задержек - поведение как для node_order_statuses",
+      "paths": [
+        {
+          "path": "/home/hl/hl/data/latency_buckets/bucket_guard/*/hourly",
+          "rule_type": "keep_latest_directory",
+          "subdir_pattern": "*"
+        },
+        {
+          "path": "/home/hl/hl/data/latency_buckets/*/hourly",
+          "rule_type": "keep_latest_directory",
+          "subdir_pattern": "*"
+        }
+      ]
+    },
+    "node_logs": {
+      "description": "Логи и данные узлов",
+      "paths": [
+        {
+          "path": "/home/hl/hl/data/log/*/*/",
+          "rule_type": "keep_last_files",
+          "keep_count": 3,
+          "filename_pattern": "yyyyMMdd"
+        },
+        {
+          "path": "/home/hl/hl/data/node_fast_block_times/",
+          "rule_type": "keep_last_files",
+          "keep_count": 3,
+          "filename_pattern": "yyyyMMdd"
+        },
+        {
+          "path": "/home/hl/hl/data/node_logs/*/hourly",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10,
+          "subdir_pattern": "*"
+        },
+        {
+          "path": "/home/hl/hl/data/node_slow_block_times/",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 3
+        }
+      ]
+    },
+    "periodic_data": {
+      "description": "Периодические данные",
+      "paths": [
+        {
+          "path": "/home/hl/hl/data/periodic_abci_state_statuses/20251014",
+          "rule_type": "keep_last_directories",
+          "keep_count": 3
+        },
+        {
+          "path": "/home/hl/hl/data/rate_limited_ips/*/hourly",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10,
+          "subdir_pattern": "*"
+        },
+        {
+          "path": "/home/hl/hl/data/tcp_lz4_stats/20250914",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 3
+        },
+        {
+          "path": "/home/hl/hl/data/tcp_traffic/hourly",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10
+        },
+        {
+          "path": "/home/hl/hl/data/tokio_spawn_forever_metrics/hourly",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10
+        },
+        {
+          "path": "/home/hl/hl/data/visor_abci_states/hourly",
+          "rule_type": "keep_last_by_creation_time",
+          "keep_count": 10
+        },
+        {
+          "path": "/home/hl/hl/data/visor_child_stderr/",
+          "rule_type": "keep_last_directories",
+          "keep_count": 3,
+          "filename_pattern": "yyyyMMdd"
+        }
+      ]
+    }
+  },
+  "rule_types": {
+    "date_in_filename": {
+      "description": "Очистка по дате в имени файла",
+      "parameters": ["retention_days", "filename_pattern"]
+    },
+    "keep_last_files": {
+      "description": "Оставить последние N файлов",
+      "parameters": ["keep_count", "filename_pattern"]
+    },
+    "keep_last_by_creation_time": {
+      "description": "Оставить последние N файлов по времени создания",
+      "parameters": ["keep_count"]
+    },
+    "keep_latest_directory": {
+      "description": "Оставить последнюю директорию",
+      "parameters": ["subdir_pattern"]
+    },
+    "keep_last_directories": {
+      "description": "Оставить последние N директорий",
+      "parameters": ["keep_count", "filename_pattern"]
+    }
+  },
+  "settings": {
+    "dry_run": false,
+    "max_execution_time_minutes": 30,
+    "log_level": "DEBUG"
+  }
+}

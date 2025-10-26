@@ -11,6 +11,7 @@ import time
 from src.api.routes import router
 from src.api.websocket_routes import router as websocket_router, set_websocket_manager
 from src.api.health_routes import router as health_router
+from src.api.cleanup_routes import router as cleanup_router
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.watcher.single_file_tail_watcher import SingleFileTailWatcher
@@ -111,6 +112,7 @@ app.add_middleware(
 app.include_router(router, prefix="/api/v1")
 app.include_router(websocket_router, prefix="/ws")
 app.include_router(health_router, prefix="/api/v1")
+app.include_router(cleanup_router, prefix="/api/v1")
 
 # Global instances
 config_manager = ConfigManager()
