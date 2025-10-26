@@ -104,16 +104,23 @@ class TestBufferRaceCondition:
         for line in test_lines_batch1:
             watcher.line_buffer.append(line.strip())
         
-        # Start processing first batch (will take some time)
-        process_task = asyncio.create_task(watcher._process_batch())
+        # Mock the _process_batch_sequential to simulate processing time
+        original_sequential = watcher._process_batch_sequential
+        async def mock_sequential(lines):
+            await asyncio.sleep(0.1)  # Simulate processing time
+            return await original_sequential(lines)
         
-        # Immediately add second batch (simulating concurrent _read_new_lines())
-        await asyncio.sleep(0.01)  # Small delay to ensure processing started
-        for line in test_lines_batch2:
-            watcher.line_buffer.append(line.strip())
-        
-        # Wait for first batch to complete
-        await process_task
+        with patch.object(watcher, '_process_batch_sequential', side_effect=mock_sequential):
+            # Start processing first batch (will take some time)
+            process_task = asyncio.create_task(watcher._process_batch())
+            
+            # Immediately add second batch (simulating concurrent _read_new_lines())
+            await asyncio.sleep(0.01)  # Small delay to ensure processing started
+            for line in test_lines_batch2:
+                watcher.line_buffer.append(line.strip())
+            
+            # Wait for first batch to complete
+            await process_task
         
         # Verify second batch is in buffer
         assert len(watcher.line_buffer) == 2, \
@@ -268,44 +275,29 @@ class TestParallelProcessingDeadlock:
             watcher.parallel_workers = workers
             test_lines = [f'{{"user":"0x{i:03x}","oid":{i},"coin":"BTC","side":"A","px":"50000","sz":"1","timestamp":"2025-10-07T14:00:00.000000"}}' for i in range(line_count)]
             
-            # Track actual chunks created
-            actual_chunks_created = None
+            # Track actual chunks created by mocking the executor
+            actual_chunks_created = 0
+            chunk_sizes = []
             
-            def capture_chunks(chunk_lines):
-                # Just return empty, we only care about counting
+            # Mock the executor to count chunks
+            original_run_in_executor = asyncio.get_event_loop().run_in_executor
+            
+            async def mock_run_in_executor(executor, fn, *args):
+                nonlocal actual_chunks_created
+                if len(args) > 0 and isinstance(args[0], list):
+                    chunk_sizes.append(len(args[0]))
+                    actual_chunks_created += 1
+                # Return empty result
                 return []
             
-            original_run = watcher.executor.submit
-            submit_count = 0
-            
-            def counting_submit(fn, *args):
-                nonlocal submit_count
-                submit_count += 1
-                # Call original but return immediately
-                return original_run(lambda: [])
-            
-            with patch.object(watcher.executor, 'submit', side_effect=counting_submit):
-                with patch('asyncio.get_event_loop') as mock_loop:
-                    # Mock run_in_executor to count calls
-                    calls = []
-                    def mock_run_in_executor(executor, fn, chunk):
-                        calls.append(len(chunk))
-                        # Return completed future
-                        future = asyncio.Future()
-                        future.set_result([])
-                        return future
-                    
-                    mock_loop.return_value.run_in_executor = mock_run_in_executor
-                    
-                    await watcher._process_batch_parallel(test_lines)
-                    
-                    actual_chunks_created = len(calls)
+            with patch.object(asyncio.get_event_loop(), 'run_in_executor', side_effect=mock_run_in_executor):
+                await watcher._process_batch_parallel(test_lines)
             
             assert actual_chunks_created == expected_chunks, \
                 f"Expected {expected_chunks} chunks for {line_count} lines with {workers} workers, got {actual_chunks_created}"
             
             # Verify all lines are covered
-            total_lines_in_chunks = sum(calls)
+            total_lines_in_chunks = sum(chunk_sizes)
             assert total_lines_in_chunks == line_count, \
                 f"Expected {line_count} total lines, got {total_lines_in_chunks}"
     
@@ -343,14 +335,28 @@ class TestParallelProcessingDeadlock:
         initial_size = len(watcher.line_buffer)
         assert initial_size == 150000
         
-        # Mock processing to avoid actual work
-        with patch.object(watcher, '_process_batch_parallel', return_value=[]):
-            with patch.object(watcher, '_process_batch_sequential', return_value=[]):
+        # Mock processing to avoid actual work and track what gets processed
+        processed_lines = []
+        
+        async def mock_parallel(lines):
+            processed_lines.extend(lines)
+            return []
+        
+        async def mock_sequential(lines):
+            processed_lines.extend(lines)
+            return []
+        
+        with patch.object(watcher, '_process_batch_parallel', side_effect=mock_parallel):
+            with patch.object(watcher, '_process_batch_sequential', side_effect=mock_sequential):
                 await watcher._process_batch()
         
         # Should have processed 100K and left 50K in buffer
         assert len(watcher.line_buffer) == 50000, \
             f"Should have 50K lines remaining in buffer, got {len(watcher.line_buffer)}"
+        
+        # Verify that exactly 100K lines were processed
+        assert len(processed_lines) == 100000, \
+            f"Should have processed 100K lines, got {len(processed_lines)}"
     
     @pytest.mark.asyncio  
     async def test_executor_recreated_after_timeout(self, watcher):
@@ -407,6 +413,7 @@ class TestBufferMemoryLeak:
         
         # Mock processing to track buffer sizes
         async def track_buffer_size(lines):
+            # Check buffer size DURING processing (after snapshot but before clearing)
             buffer_sizes_during_processing.append(len(watcher.line_buffer))
             await asyncio.sleep(0.01)  # Simulate processing time
             return []
@@ -428,6 +435,7 @@ class TestBufferMemoryLeak:
             f"Buffer should not exceed 100 lines, but saw {max_buffer_size_seen}"
         
         # Verify buffer was cleared during processing (should see 0 sizes)
+        # The buffer is cleared immediately after snapshot, so we should see 0 in the list
         assert 0 in buffer_sizes_during_processing, \
             "Buffer should be 0 during processing (cleared immediately after snapshot)"
         

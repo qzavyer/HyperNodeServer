@@ -655,7 +655,9 @@ class TestReactiveOrderWatcher:
         mock_websocket_manager.broadcast_order_update = AsyncMock()
         self.watcher.websocket_manager = mock_websocket_manager
         
-        await self.watcher._send_order_to_websocket(mock_order)
+        # Мокаем _should_process_order чтобы он возвращал True
+        with patch.object(self.watcher, '_should_process_order', return_value=True):
+            await self.watcher._send_order_to_websocket(mock_order)
         
         # Проверяем, что ордер отправлен в WebSocket
         mock_websocket_manager.broadcast_order_update.assert_called_once_with(mock_order)
@@ -687,7 +689,9 @@ class TestReactiveOrderWatcher:
         mock_websocket_manager.broadcast_order_update = AsyncMock()
         self.watcher.websocket_manager = mock_websocket_manager
         
-        await self.watcher._send_orders_to_websocket(orders)
+        # Мокаем _should_process_order чтобы он возвращал True для всех ордеров
+        with patch.object(self.watcher, '_should_process_order', return_value=True):
+            await self.watcher._send_orders_to_websocket(orders)
         
         # Проверяем, что каждый ордер отправлен в WebSocket
         assert mock_websocket_manager.broadcast_order_update.call_count == 2

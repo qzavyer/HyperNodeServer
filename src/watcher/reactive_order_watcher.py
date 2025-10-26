@@ -957,6 +957,19 @@ class ReactiveOrderWatcher:
         
         logger.info("ReactiveOrderWatcher startup completed")
 
+    def _should_process_order(self, order: 'Order') -> bool:
+        """Проверить, должен ли ордер быть обработан.
+        
+        Args:
+            order: Ордер для проверки
+            
+        Returns:
+            True если ордер должен быть обработан
+        """
+        # Базовая проверка - всегда обрабатываем ордера
+        # В будущем здесь можно добавить фильтрацию по конфигурации
+        return True
+
     async def stop_monitoring(self) -> None:
         """Останавливает мониторинг отслеживаемых ордеров."""
         logger.info("Stopping ReactiveOrderWatcher monitoring...")
