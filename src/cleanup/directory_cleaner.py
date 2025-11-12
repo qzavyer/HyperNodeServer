@@ -36,6 +36,7 @@ class DirectoryCleaner:
         self.checkpoints_path = self.hyperliquid_data_dir / "evm_db_hub_slow" / "checkpoint"
         self.max_replica_dirs = 1  # Maximum number of replica_cmds directories to keep
         self.max_checkpoints_dirs = 5  # Maximum number of checkpoints directories to keep
+        self.max_checkpoint_files = 10  # Maximum number of checkpoint files to keep in replica_cmds
         self.logger = setup_logger(__name__)
         self.single_file_watcher = single_file_watcher
         
@@ -153,6 +154,7 @@ class DirectoryCleaner:
     async def _cleanup_replica_cmds_async(self, dry_run: bool = False) -> int:
         """Async cleanup of the replica_cmds directory.
         Removes directories with ISO datetime format (2025-10-10T23:11:09Z).
+        In the latest ISO directory, cleans up date directories and checkpoint files.
     
         Returns:
             int: Number of removed directories
@@ -179,6 +181,7 @@ class DirectoryCleaner:
             self.logger.info(f"Found {len(directories)} directories in {self.replica_path}")
             
             # Keep last max_replica_dirs directories
+            latest_iso_dir = directories[0] if directories else None
             directories_to_remove = directories[self.max_replica_dirs:]
             removed_dirs = 0
             
@@ -188,10 +191,105 @@ class DirectoryCleaner:
                 if not dry_run:
                     await self._remove_directory_async(dir_path)
                 removed_dirs += 1
+            
+            # Clean up inside the latest ISO directory
+            if latest_iso_dir:
+                removed_dirs += await self._cleanup_date_dirs_in_replica_async(latest_iso_dir, dry_run)
 
             return removed_dirs
         except Exception as e:
             self.logger.error(f"❌ Error cleaning replica_cmds directories: {e}")
+            raise
+    
+    async def _cleanup_date_dirs_in_replica_async(self, iso_dir: Path, dry_run: bool = False) -> int:
+        """Cleanup date directories (yyyyMMdd) inside ISO directory.
+        Keeps only the latest date directory and cleans checkpoint files inside it.
+        
+        Args:
+            iso_dir: ISO datetime directory path (e.g., 2025-11-10T16:33:55Z)
+            dry_run: If True, simulate operations without actual deletion
+            
+        Returns:
+            int: Number of removed directories
+        """
+        try:
+            # Find all date directories (yyyyMMdd format)
+            date_directories = []
+            for item in iso_dir.iterdir():
+                if item.is_dir() and self.date_pattern.match(item.name):
+                    date_directories.append(item)
+            
+            if not date_directories:
+                self.logger.debug(f"No date directories found in {iso_dir.name}")
+                return 0
+            
+            # Sort by name (yyyyMMdd format sorts correctly)
+            date_directories.sort(key=lambda p: p.name, reverse=True)
+            
+            self.logger.info(f"Found {len(date_directories)} date directories in {iso_dir.name}, keeping latest")
+            
+            # Keep latest directory
+            latest_date_dir = date_directories[0]
+            directories_to_remove = date_directories[1:]
+            removed_dirs = 0
+            
+            # Delete old date directories
+            for dir_path in directories_to_remove:
+                self._log_dry_run_operation("delete old date directory", dir_path.name, dry_run)
+                if not dry_run:
+                    await self._remove_directory_async(dir_path)
+                removed_dirs += 1
+            
+            # Clean up checkpoint files in the latest date directory
+            await self._cleanup_checkpoint_files_async(latest_date_dir, dry_run)
+            
+            return removed_dirs
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning date directories in {iso_dir}: {e}")
+            raise
+    
+    async def _cleanup_checkpoint_files_async(self, date_dir: Path, dry_run: bool = False) -> int:
+        """Cleanup checkpoint files (numeric names) in date directory.
+        Keeps last N checkpoint files.
+        
+        Args:
+            date_dir: Date directory path (e.g., 20251110)
+            dry_run: If True, simulate operations without actual deletion
+            
+        Returns:
+            int: Number of removed files
+        """
+        try:
+            # Find all numeric checkpoint files
+            checkpoint_files = []
+            for item in date_dir.iterdir():
+                if item.is_file() and self.numeric_pattern.match(item.name):
+                    checkpoint_files.append(item)
+            
+            if not checkpoint_files:
+                self.logger.debug(f"No checkpoint files found in {date_dir.name}")
+                return 0
+            
+            # Sort by numeric value (newest checkpoints have higher numbers)
+            checkpoint_files.sort(key=lambda p: int(p.name), reverse=True)
+            
+            self.logger.info(f"Found {len(checkpoint_files)} checkpoint files in {date_dir.name}, keeping last {self.max_checkpoint_files}")
+            
+            # Keep last max_checkpoint_files files
+            files_to_remove = checkpoint_files[self.max_checkpoint_files:]
+            removed_files = 0
+            
+            # Delete old checkpoint files
+            for file_path in files_to_remove:
+                self._log_dry_run_operation("delete old checkpoint file", file_path.name, dry_run)
+                if not dry_run:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, file_path.unlink)
+                removed_files += 1
+            
+            return removed_files
+        except Exception as e:
+            self.logger.error(f"❌ Error cleaning checkpoint files in {date_dir}: {e}")
             raise
     
     async def _cleanup_periodic_abci_async(self, dry_run: bool = False) -> int:
