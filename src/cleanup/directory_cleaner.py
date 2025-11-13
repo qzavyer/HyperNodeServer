@@ -241,7 +241,7 @@ class DirectoryCleaner:
                 removed_dirs += 1
             
             # Clean up checkpoint files in the latest date directory
-            await self._cleanup_checkpoint_files_async(latest_date_dir, dry_run)
+            # await self._cleanup_checkpoint_files_async(latest_date_dir, dry_run)
             
             return removed_dirs
         except Exception as e:
