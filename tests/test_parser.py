@@ -24,7 +24,7 @@ class TestLogParser:
     
     def test_parse_line_invalid_json(self):
         """Test parsing invalid JSON line."""
-        result = self.parser._parse_line("invalid json")
+        result = self.parser.parse_line("invalid json")
         assert result is None
     
     def test_parse_valid_order_new_format(self):
@@ -33,7 +33,7 @@ class TestLogParser:
         json_line = '{"time":"2025-09-02T08:26:36.877863946","user":"0x123","status":"open","order":{"coin":"BTC","side":"B","limitPx":"50000","origSz":"1.0","oid":123}}'
         
         # Act
-        result = self.parser._parse_line(json_line)
+        result = self.parser.parse_line(json_line)
         
         # Assert
         assert result is not None
@@ -50,7 +50,7 @@ class TestLogParser:
         json_line = '{"time":"2025-09-02T08:26:36.877863946","user":"0x456","status":"filled","order":{"coin":"ETH","side":"A","limitPx":"3000","origSz":"10.0","oid":456}}'
         
         # Act
-        result = self.parser._parse_line(json_line)
+        result = self.parser.parse_line(json_line)
         
         # Assert
         assert result is not None
@@ -63,7 +63,7 @@ class TestLogParser:
         json_line = '{"time":"2025-09-02T08:26:36.877863946","user":"0x789","status":"canceled","order":{"coin":"ETH","side":"B","limitPx":"44.663","origSz":"223.03","oid":789}}'
         
         # Act
-        result = self.parser._parse_line(json_line)
+        result = self.parser.parse_line(json_line)
         
         # Assert
         assert result is not None

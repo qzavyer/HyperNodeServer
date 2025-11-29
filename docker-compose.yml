@@ -9,7 +9,7 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./config:/app/config
-      - ~/hl/data:/app/data
+      - ~/hl/data:/app/node_data
       - ~/hl/hyperliquid_data:/app/hyperliquid_data
     environment:
       - API_HOST=0.0.0.0

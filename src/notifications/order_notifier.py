@@ -6,19 +6,31 @@ from src.storage.config_manager import ConfigManager
 from src.websocket.websocket_manager import WebSocketManager
 from src.utils.logger import get_logger
 
+# Импорт NATS клиента (опциональный)
+try:
+    from src.nats.nats_client import NATSClient
+    NATS_AVAILABLE = False
+except ImportError:
+    NATS_AVAILABLE = False
+    NATSClient = None
+
 logger = get_logger(__name__)
 
 class OrderNotifier:
     """Notifies WebSocket subscribers about relevant order updates."""
     
-    def __init__(self, websocket_manager: WebSocketManager, config_manager: ConfigManager):
+    def __init__(self, websocket_manager: WebSocketManager, config_manager: ConfigManager, nats_client: Optional['NATSClient'] = None):
         self.websocket_manager = websocket_manager
         self.config_manager = config_manager
+        self.nats_client = nats_client
         self.logger = get_logger(__name__)
         
         # Кэш конфигурации для быстрого доступа
         self._symbol_config_cache = {}
         self._last_config_update = None
+        
+        # NATS интеграция
+        self._nats_enabled = nats_client is not None and NATS_AVAILABLE
         
     def _should_notify_order(self, order: Order) -> bool:
         """Check if order should trigger notification based on configuration.
@@ -76,6 +88,10 @@ class OrderNotifier:
             
             if notification_type in ["batch", "both"]:
                 await self.websocket_manager.queue_order_for_batch(order)
+            
+            # Отправляем в NATS если включено
+            if self._nats_enabled:
+                await self._send_order_to_nats(order)
                 
         except Exception as e:
             self.logger.error(f"Error sending order notification: {e}")
@@ -106,14 +122,58 @@ class OrderNotifier:
                 
                 if notification_type in ["batch", "both"]:
                     await self.websocket_manager.queue_order_for_batch(order)
+                
+                # Отправляем в NATS если включено
+                if self._nats_enabled:
+                    await self._send_order_to_nats(order)
                     
         except Exception as e:
             self.logger.error(f"Error sending batch order notifications: {e}")
     
+    async def _send_order_to_nats(self, order: Order) -> None:
+        """Send order data to NATS if enabled.
+        
+        Args:
+            order: Order to send
+        """
+        if not self._nats_enabled or not self.nats_client:
+            return
+        
+        try:
+            # Преобразуем Order в словарь для отправки
+            order_data = {
+                "id": order.id,
+                "symbol": order.symbol,
+                "side": order.side,
+                "price": order.price,
+                "size": order.size,
+                "owner": order.owner,
+                "timestamp": order.timestamp,
+                "status": order.status
+            }
+            
+            # Отправляем в NATS
+            await self.nats_client.publish_order_data(order_data, "parser_data.orders")
+            self.logger.debug(f"Order {order.id} sent to NATS via OrderNotifier")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to send order {order.id} to NATS via OrderNotifier: {e}")
+    
+    def is_nats_enabled(self) -> bool:
+        """Check if NATS integration is enabled.
+        
+        Returns:
+            True if NATS is enabled and available
+        """
+        return self._nats_enabled
+    
     def get_notification_stats(self) -> dict:
         """Get notification statistics."""
-        return {
+        stats = {
             "websocket_manager_running": self.websocket_manager.is_running if self.websocket_manager else False,
             "websocket_connections": self.websocket_manager.get_connection_stats() if self.websocket_manager else {},
-            "config_manager_available": self.config_manager is not None
+            "config_manager_available": self.config_manager is not None,
+            "nats_enabled": self._nats_enabled,
+            "nats_connected": self.nats_client.is_connected() if self.nats_client else False
         }
+        return stats

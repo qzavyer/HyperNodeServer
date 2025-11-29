@@ -9,6 +9,14 @@ from src.storage.models import LogEntry, ParsedData, Order
 from src.parser.order_extractor import OrderExtractor
 from src.utils.logger import get_logger
 
+# Импорт NATS клиента (опциональный)
+try:
+    from src.nats.nats_client import NATSClient
+    NATS_AVAILABLE = False
+except ImportError:
+    NATS_AVAILABLE = False
+    NATSClient = None
+
 logger = get_logger(__name__)
 
 class ParserError(Exception):
@@ -18,17 +26,20 @@ class ParserError(Exception):
 class LogParser:
     """Parser for HyperLiquid Node log files."""
     
-    def __init__(self, chunk_size: int = 8192, batch_size: int = 1000):
+    def __init__(self, chunk_size: int = 8192, batch_size: int = 1000, nats_client: Optional['NATSClient'] = None):
         """Initialize log parser.
         
         Args:
             chunk_size: Size of file chunks to read (bytes)
             batch_size: Number of orders to process in one batch
+            nats_client: Optional NATS client for publishing data
         """
         self.logger = get_logger(__name__)
         self.chunk_size = chunk_size
         self.batch_size = batch_size
         self.order_extractor = OrderExtractor()
+        self.nats_client = nats_client
+        self._nats_enabled = nats_client is not None and NATS_AVAILABLE
     
     def parse_file(self, file_path: str) -> List['Order']:
         """Parse log file and extract orders (synchronous, for backward compatibility).
@@ -56,7 +67,7 @@ class LogParser:
                         continue
                     
                     try:
-                        order = self._parse_line(line)
+                        order = self.parse_line(line)
                         if order:
                             orders.append(order)
                     except Exception as e:
@@ -113,7 +124,7 @@ class LogParser:
                             continue
                         
                         try:
-                            order = self._parse_line(line)
+                            order = self.parse_line(line)
                             if order:
                                 orders_batch.append(order)
                                 total_orders += 1
@@ -137,6 +148,10 @@ class LogParser:
                 
                 # Yield remaining orders
                 if orders_batch:
+                    # Отправляем в NATS если включено
+                    if self._nats_enabled:
+                        await self._send_orders_batch_to_nats(orders_batch)
+                    
                     yield orders_batch
                 
                 self.logger.info(f"Completed async parse: {total_orders} orders from {file_path}")
@@ -190,17 +205,6 @@ class LogParser:
             self.logger.debug(f"Invalid JSON in line: {line[:100]}...")
             return None
     
-    def _parse_line(self, line: str) -> Optional['Order']:
-        """Parse single log line (private method for internal use).
-        
-        Args:
-            line: Raw log line
-            
-        Returns:
-            Order object if valid, None otherwise
-        """
-        return self.parse_line(line)
-    
     def _extract_order(self, data: Dict[str, Any]) -> Optional['Order']:
         """Extract order from parsed JSON data.
         
@@ -222,3 +226,59 @@ class LogParser:
             Order object if valid data, None otherwise
         """
         return self._extract_order(data)
+    
+    async def _send_order_to_nats(self, order: Order) -> None:
+        """Send order data to NATS if enabled.
+        
+        Args:
+            order: Order to send
+        """
+        if not self._nats_enabled or not self.nats_client:
+            return
+        
+        try:
+            # Преобразуем Order в словарь для отправки
+            order_data = {
+                "id": order.id,
+                "symbol": order.symbol,
+                "side": order.side,
+                "price": order.price,
+                "size": order.size,
+                "owner": order.owner,
+                "timestamp": order.timestamp,
+                "status": order.status
+            }
+            
+            # Отправляем в NATS
+            await self.nats_client.publish_order_data(order_data, "parser_data.orders")
+            self.logger.debug(f"Order {order.id} sent to NATS")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to send order {order.id} to NATS: {e}")
+    
+    async def _send_orders_batch_to_nats(self, orders: List[Order]) -> None:
+        """Send batch of orders to NATS if enabled.
+        
+        Args:
+            orders: List of orders to send
+        """
+        if not self._nats_enabled or not self.nats_client or not orders:
+            return
+        
+        try:
+            # Отправляем каждый ордер отдельно
+            for order in orders:
+                await self._send_order_to_nats(order)
+            
+            self.logger.debug(f"Sent {len(orders)} orders to NATS")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to send orders batch to NATS: {e}")
+    
+    def is_nats_enabled(self) -> bool:
+        """Check if NATS integration is enabled.
+        
+        Returns:
+            True if NATS is enabled and available
+        """
+        return self._nats_enabled

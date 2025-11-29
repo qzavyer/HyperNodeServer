@@ -8,10 +8,9 @@ class Settings(BaseSettings):
     """Application settings."""
     
     # Node logs path
-    NODE_LOGS_PATH: str = "/app/node_logs"
+    NODE_DATA_PATH: str = "/app/node_data"
     NODE_LOGS_PATH_HYPERLIQUID: str = "/app/node_logs_hyperliquid"
     HYPERLIQUID_DATA_PATH: str = "/app/hyperliquid_data"
-    DATA_PATH: str = "/app/data"
 
     # Cleanup settings
     CLEANUP_INTERVAL_HOURS: int = 2
@@ -89,9 +88,6 @@ class Settings(BaseSettings):
     LOG_FILE_PATH: str = "logs/app.log"
     LOG_MAX_SIZE_MB: int = 100
     LOG_RETENTION_DAYS: int = 30
-    
-    # Data settings
-    DATA_DIR: str = "data"
     
     # Resource monitoring settings for HyperLiquid node coexistence
     ENABLE_RESOURCE_MONITORING: bool = True  # Enable resource monitoring

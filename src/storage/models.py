@@ -49,7 +49,6 @@ class Config(BaseModel):
     log_file_path: str = Field(..., description="Log file path")
     log_max_size_mb: int = Field(..., ge=1, le=1000, description="Maximum log file size in MB")
     log_retention_days: int = Field(..., ge=1, le=365, description="Log retention days")
-    data_dir: str = Field(..., description="Data directory")
     config_file_path: str = Field(..., description="Configuration file path")
     max_orders_per_request: int = Field(..., ge=1, le=10000, description="Maximum orders per request")
     file_read_retry_attempts: int = Field(..., ge=1, le=10, description="File read retry attempts")

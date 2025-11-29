@@ -163,7 +163,7 @@ class ConfigManager:
             Default configuration
         """
         return Config(
-            node_logs_path=settings.DATA_PATH,
+            node_logs_path=settings.NODE_DATA_PATH,
             cleanup_interval_hours=settings.CLEANUP_INTERVAL_HOURS,
             api_host=settings.API_HOST,
             api_port=settings.API_PORT,
@@ -171,7 +171,6 @@ class ConfigManager:
             log_file_path=settings.LOG_FILE_PATH,
             log_max_size_mb=settings.LOG_MAX_SIZE_MB,
             log_retention_days=settings.LOG_RETENTION_DAYS,
-            data_dir=settings.DATA_DIR,
             config_file_path=settings.CONFIG_FILE_PATH,
             max_orders_per_request=settings.MAX_ORDERS_PER_REQUEST,
             file_read_retry_attempts=settings.FILE_READ_RETRY_ATTEMPTS,

@@ -7,8 +7,10 @@ from src.storage.models import Order, Config, SymbolConfig
 from src.storage.order_manager import OrderManager
 from src.storage.config_manager import ConfigManager
 from src.models.reactive_api import OrderSearchRequest, OrderTrackRequest, ReactiveWatcherStatus
+from src.utils.logger import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 # Global instances (will be initialized in main.py)
 order_manager: Optional[OrderManager] = None
@@ -168,6 +170,29 @@ async def update_symbols_async(
         return await manager.update_symbols_async(symbols)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update symbols: {str(e)}")
+
+@router.post("/config/reload", response_model=Config)
+async def reload_config_async(
+    manager: ConfigManager = Depends(get_config_manager)
+) -> Config:
+    """Reload configuration from file.
+
+    Args:
+        manager: Config manager instance
+
+    Returns:
+        Reloaded configuration
+    """
+    try:
+        config = await manager.load_config_async()
+        logger.info(f"✅ Configuration reloaded successfully with {len(config.symbols_config)} symbols")
+        if config.symbols_config:
+            symbol_names = [s.symbol for s in config.symbols_config]
+            logger.info(f"📊 Configured symbols: {symbol_names}")
+        return config
+    except Exception as e:
+        logger.error(f"❌ Failed to reload configuration: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reload config: {str(e)}")
 
 @router.get("/debug/single-file-tail")
 async def debug_single_file_tail() -> Dict[str, Any]:

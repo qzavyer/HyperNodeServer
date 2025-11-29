@@ -19,6 +19,9 @@ aiohttp==3.9.1
 # WebSocket client for testing
 websockets==12.0
 
+# NATS messaging
+nats-py==2.3.0
+
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
