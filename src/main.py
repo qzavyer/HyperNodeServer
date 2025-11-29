@@ -34,8 +34,16 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         self.timeout_seconds = timeout_seconds
     
     async def dispatch(self, request: Request, call_next):
-        # Log all incoming requests for debugging
-        logger.debug(f"Incoming request: {request.method} {request.url} - Headers: {dict(request.headers)}")
+        # Log all incoming requests for debugging (including WebSocket upgrade attempts)
+        upgrade_header = request.headers.get("upgrade", "").lower()
+        connection_header = request.headers.get("connection", "").lower()
+        is_websocket_upgrade = upgrade_header == "websocket" and "upgrade" in connection_header
+        
+        if is_websocket_upgrade:
+            logger.info(f"🔌 WebSocket upgrade request detected: {request.method} {request.url}")
+            logger.info(f"   Headers: upgrade={upgrade_header}, connection={connection_header}")
+        else:
+            logger.debug(f"Incoming request: {request.method} {request.url} - Headers: {dict(request.headers)}")
         
         try:
             # Set timeout for the request
