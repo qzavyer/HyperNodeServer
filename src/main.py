@@ -34,6 +34,9 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         self.timeout_seconds = timeout_seconds
     
     async def dispatch(self, request: Request, call_next):
+        # Log all incoming requests for debugging
+        logger.debug(f"Incoming request: {request.method} {request.url} - Headers: {dict(request.headers)}")
+        
         try:
             # Set timeout for the request
             async with asyncio.timeout(self.timeout_seconds):

@@ -30,7 +30,9 @@ async def websocket_order_update(websocket: WebSocket):
     """WebSocket endpoint for real-time order updates."""
     
     logger.info("=== WebSocket orderUpdate Connection Attempt ===")
-    logger.info(f"Client IP: {websocket.client.host}")
+    logger.info(f"Client IP: {websocket.client.host if websocket.client else 'unknown'}")
+    logger.info(f"WebSocket URL: {websocket.url}")
+    logger.info(f"WebSocket headers: {dict(websocket.headers)}")
     
     # Проверяем менеджер до accept()
     if not websocket_manager:
@@ -92,7 +94,9 @@ async def websocket_order_update(websocket: WebSocket):
 async def websocket_order_batch(websocket: WebSocket):
     """WebSocket endpoint for batched order updates."""
     logger.info("=== WebSocket orderBatch Connection Attempt ===")
-    logger.info(f"Client IP: {websocket.client.host}")
+    logger.info(f"Client IP: {websocket.client.host if websocket.client else 'unknown'}")
+    logger.info(f"WebSocket URL: {websocket.url}")
+    logger.info(f"WebSocket headers: {dict(websocket.headers)}")
     
     # Проверяем менеджер до accept()
     if not websocket_manager:
